@@ -97,6 +97,20 @@ celery -A config worker -l info            # separate terminal
 celery -A config beat   -l info            # separate terminal
 ```
 
+## Example feature: Tickets (proves the stack end to end)
+
+A small but real vertical slice so you can see data flow through every layer:
+
+- **Backend** — `tickets/` app: a `Ticket` model (title, description, status,
+  priority, `created_by`), a DRF `ModelViewSet` (auth-protected, stamps the
+  creator from the request), routed at `/api/tickets/`.
+- **Frontend** — `src/pages/TicketsPage.js` (the app's home route `/`) with
+  `src/api/tickets.js`: list, create, change status inline, delete — with
+  optimistic updates and toasts.
+
+Try it: sign in, then create a ticket. The same call is `POST /api/tickets/`
+(also browsable at `/api/tickets/` and documented in `/swagger/`).
+
 ## Deploying to Heroku
 Each app deploys independently (same as the Collings repos).
 
@@ -113,12 +127,13 @@ backend/
   config/        settings, urls, asgi, wsgi, celery
   accounts/      custom User + JWT auth endpoints
   core/          health check + sample Celery task
+  tickets/       example CRUD feature (model + DRF viewset)
 frontend/
-  src/api/       axios instance (CSRF + JWT refresh) + auth calls
+  src/api/       axios instance (CSRF + JWT refresh) + auth/tickets calls
   src/store/     Redux Toolkit store + authSlice
   src/contexts/  ThemeContext (dark mode)
   src/components/ ProtectedRoute
-  src/pages/     Login, Dashboard
+  src/pages/     Login, Tickets
 ```
 
 ## What to build on top

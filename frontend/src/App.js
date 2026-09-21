@@ -1,8 +1,8 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import ProtectedRoute from "./components/ProtectedRoute";
-import DashboardPage from "./pages/DashboardPage";
 import LoginPage from "./pages/LoginPage";
+import TicketsPage from "./pages/TicketsPage";
 
 export default function App() {
   return (
@@ -13,7 +13,7 @@ export default function App() {
           path="/"
           element={
             <ProtectedRoute>
-              <DashboardPage />
+              <TicketsPage />
             </ProtectedRoute>
           }
         />
