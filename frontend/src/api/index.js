@@ -1,12 +1,15 @@
 import axios from "axios";
 import toast from "react-hot-toast";
 
-import store from "../store/store";
-import { logout, setAccessToken } from "../store/slices/authSlice";
-
 // Base URL: local backend by default, overridden by REACT_APP_API_URL per env.
 // Mirrors the Collings CRM: JWT (Authorization header) + Django CSRF, with a
 // single-flight refresh queue so a burst of 401s triggers one refresh, not many.
+//
+// NOTE: this module deliberately does NOT import the Redux store. The store is
+// built from authSlice, which imports the API layer — importing the store back
+// here would be a circular dependency that leaves `authReducer` undefined at
+// startup (blank screen). On a failed refresh we clear tokens and redirect
+// instead; the app re-reads auth state from localStorage on the next load.
 const api = axios.create({
   baseURL: (process.env.REACT_APP_API_URL || "http://localhost:8000").replace(/\/$/, ""),
   headers: { "Content-Type": "application/json" },
@@ -45,6 +48,12 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+const forceLogin = () => {
+  localStorage.removeItem("jwt_access");
+  localStorage.removeItem("jwt_refresh");
+  if (window.location.pathname !== "/login") window.location.href = "/login";
+};
+
 // ---- response: refresh-on-401 with a single-flight queue ----
 let isRefreshing = false;
 let queue = [];
@@ -59,7 +68,7 @@ api.interceptors.response.use(
     const original = error.config;
     const status = error.response?.status;
 
-    if (status !== 401 || original._retry || original.url?.includes("/auth/refresh/")) {
+    if (status !== 401 || !original || original._retry || original.url?.includes("/auth/refresh/")) {
       return Promise.reject(error);
     }
     original._retry = true;
@@ -82,14 +91,13 @@ api.interceptors.response.use(
       );
       localStorage.setItem("jwt_access", data.access);
       if (data.refresh) localStorage.setItem("jwt_refresh", data.refresh);
-      store.dispatch(setAccessToken(data.access));
       flush(null, data.access);
       original.headers["Authorization"] = `Bearer ${data.access}`;
       return api(original);
     } catch (e) {
       flush(e, null);
-      store.dispatch(logout());
       toast.error("Session expired, please sign in again.");
+      forceLogin();
       return Promise.reject(e);
     } finally {
       isRefreshing = false;
