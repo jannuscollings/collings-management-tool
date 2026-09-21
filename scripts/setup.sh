@@ -54,6 +54,8 @@ else
 fi
 
 python manage.py migrate
+# Seed a demo login + sample tickets so the DB clearly has data on first run.
+python manage.py seed_demo
 deactivate
 
 echo "==> Frontend setup ($FE)"
@@ -66,5 +68,6 @@ fi
 
 echo ""
 echo "Setup complete."
-echo "  - Create an admin login:  cd backend && source .venv/bin/activate && python manage.py createsuperuser"
-echo "  - Run everything:         ./scripts/dev.sh   (or: make dev / npm run dev)"
+echo "  - Demo login (already seeded):  demo@collings.com.au  /  demo12345"
+echo "  - Run everything:               ./scripts/dev.sh   (or: make dev / npm run dev)"
+echo "  - Full admin login (optional):  cd backend && source .venv/bin/activate && python manage.py createsuperuser"

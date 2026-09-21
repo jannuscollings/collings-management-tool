@@ -27,12 +27,15 @@ make setup   &&  make dev
 npm run setup && npm run dev
 ```
 
-Then create an admin login and open the app:
+`setup.sh` seeds a demo login and sample tickets, so the database has data the
+moment you open the app:
 
-```bash
-cd backend && source .venv/bin/activate && python manage.py createsuperuser
-# open http://localhost:3000  and sign in
 ```
+demo@collings.com.au  /  demo12345
+```
+
+Open http://localhost:3000 and sign in — you'll see the seeded tickets. (Re-seed
+anytime with `make seed`; create your own admin with `python manage.py createsuperuser`.)
 
 > Requirements: Python 3.12, Node 20+, npm. Docker is optional but recommended:
 > with it, setup starts this project's own Postgres (port 5433) and uses it;
