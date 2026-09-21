@@ -1,0 +1,34 @@
+# --- Core framework (mirrors Collings-CRM-BE) ---
+Django>=5.0,<5.1
+python-dotenv
+djangorestframework
+djangorestframework-simplejwt
+django-cors-headers
+drf_yasg
+
+# --- Server / static (Daphne ASGI, same as prod) ---
+daphne>=4.1.0
+channels>=4.0.0
+channels-redis>=4.2.0
+whitenoise
+gunicorn                     # WSGI fallback if you don't need websockets
+
+# --- Database ---
+psycopg2-binary
+dj-database-url
+
+# --- Async tasks ---
+celery[redis]
+django-celery-beat
+django-redis
+redis
+
+# --- Storage / media (optional, S3 in prod) ---
+django-storages[s3]
+Pillow
+
+# --- Observability (optional) ---
+sentry-sdk
+
+# --- HTTP ---
+requests

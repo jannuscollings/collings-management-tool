@@ -1,0 +1,22 @@
+# Local Postgres + Redis for development. The backend also runs fine without
+# these (SQLite + in-memory channel layer) for a first look; bring these up when
+# you want to exercise Celery/Channels the way prod does.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: boilerplate
+      POSTGRES_PASSWORD: boilerplate
+      POSTGRES_DB: boilerplate
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+volumes:
+  pgdata:

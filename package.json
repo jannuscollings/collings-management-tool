@@ -1,0 +1,11 @@
+{
+  "name": "collings-ticketing",
+  "private": true,
+  "description": "Collings-Ticketing monorepo — Django backend + React frontend.",
+  "scripts": {
+    "setup": "bash scripts/setup.sh",
+    "dev": "bash scripts/dev.sh",
+    "be": "bash -c 'cd backend && . .venv/bin/activate && python manage.py runserver 0.0.0.0:8000'",
+    "fe": "npm --prefix frontend start"
+  }
+}

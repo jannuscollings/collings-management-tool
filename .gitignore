@@ -1,0 +1,4 @@
+# Per-project rules also live in backend/.gitignore and frontend/.gitignore.
+.DS_Store
+*.log
+node_modules/

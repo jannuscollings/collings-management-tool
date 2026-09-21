@@ -1,0 +1,16 @@
+{
+  "name": "Collings-Ticketing backend",
+  "description": "Django + DRF + Channels + Celery boilerplate (Heroku-ready).",
+  "env": {
+    "SECRET_KEY": { "generator": "secret" },
+    "DEBUG": { "value": "false" },
+    "ALLOWED_HOSTS": { "value": ".herokuapp.com" }
+  },
+  "formation": {
+    "web": { "quantity": 1, "size": "basic" },
+    "worker": { "quantity": 1, "size": "basic" },
+    "beat": { "quantity": 1, "size": "basic" }
+  },
+  "addons": ["heroku-postgresql", "heroku-redis"],
+  "buildpacks": [{ "url": "heroku/python" }]
+}

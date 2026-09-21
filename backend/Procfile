@@ -1,0 +1,7 @@
+release: python manage.py migrate --noinput && python manage.py collectstatic --noinput
+# Daphne serves HTTP + WebSocket from one ASGI process (Channels), same as prod.
+web: daphne -b 0.0.0.0 -p $PORT config.asgi:application
+# Beat is separate from worker so scaling workers never duplicates scheduled tasks.
+# Scale: heroku ps:scale worker=2 (keep beat=1).
+worker: celery -A config worker --loglevel=info -E --concurrency=2
+beat: celery -A config beat --loglevel=info

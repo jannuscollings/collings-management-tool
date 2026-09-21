@@ -1,0 +1,9 @@
+{
+  "short_name": "Ticketing",
+  "name": "Collings-Ticketing",
+  "icons": [],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#4ECCDA",
+  "background_color": "#ffffff"
+}
