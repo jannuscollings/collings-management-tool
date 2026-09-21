@@ -34,8 +34,9 @@ cd backend && source .venv/bin/activate && python manage.py createsuperuser
 # open http://localhost:3000  and sign in
 ```
 
-> Requirements: Python 3.12, Node 20+, npm. No database needed for the first run
-> (the backend falls back to SQLite). Docker is optional (see step 3 below).
+> Requirements: Python 3.12, Node 20+, npm. Docker is optional but recommended:
+> with it, setup starts this project's own Postgres (port 5433) and uses it;
+> without it, the backend falls back to SQLite so the first run still works.
 
 ## Stack
 
@@ -86,15 +87,28 @@ npm start                       # http://localhost:3000
 Register a user (via `/admin/`, `createsuperuser`, or POST `/api/auth/register/`),
 then sign in at `/login`.
 
-### 3. Optional: Postgres + Redis + Celery (prod-like)
+### 3. Database
+
+The app uses **Postgres** (the same engine as the wider Collings stack) as its
+own separate database — `collings_ticketing`, on host port **5433** so it never
+clashes with any other Postgres on your machine. `scripts/setup.sh` starts it and
+wires `DATABASE_URL` automatically **when Docker is running**. If Docker isn't
+running, it falls back to a local **SQLite** file so you can still run instantly.
+
+To use Postgres manually:
 ```bash
-docker compose up -d                       # Postgres + Redis
-# in backend/.env set:
-#   DATABASE_URL=postgres://boilerplate:boilerplate@localhost:5432/boilerplate
-#   REDIS_URL=redis://localhost:6379/0
+docker compose up -d db                     # this project's Postgres (:5433)
+# backend/.env:
+#   DATABASE_URL=postgres://collings_ticketing:collings_ticketing@localhost:5433/collings_ticketing
 python manage.py migrate
-celery -A config worker -l info            # separate terminal
-celery -A config beat   -l info            # separate terminal
+```
+
+Optional Redis + Celery (prod-like background tasks):
+```bash
+docker compose up -d redis                  # this project's Redis (:6380)
+# backend/.env: REDIS_URL=redis://localhost:6380/0
+celery -A config worker -l info             # separate terminal
+celery -A config beat   -l info             # separate terminal
 ```
 
 ## Example feature: Tickets (proves the stack end to end)

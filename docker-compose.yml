@@ -1,22 +1,32 @@
-# Local Postgres + Redis for development. The backend also runs fine without
-# these (SQLite + in-memory channel layer) for a first look; bring these up when
-# you want to exercise Celery/Channels the way prod does.
+# This project's OWN Postgres + Redis for local development — matching the
+# Collings stack (Postgres), but a separate database on a non-default host port
+# so it never clashes with any other project's DB/Redis on your machine.
+#
+# The backend also runs without these (SQLite + in-memory channel layer) for a
+# zero-setup first look; bring these up for a prod-like setup.
 services:
   db:
     image: postgres:16
+    container_name: collings-ticketing-db
     environment:
-      POSTGRES_USER: boilerplate
-      POSTGRES_PASSWORD: boilerplate
-      POSTGRES_DB: boilerplate
+      POSTGRES_USER: collings_ticketing
+      POSTGRES_PASSWORD: collings_ticketing
+      POSTGRES_DB: collings_ticketing
     ports:
-      - "5432:5432"
+      - "5433:5432" # host 5433 -> container 5432 (5432 left free for other DBs)
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - ticketing_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U collings_ticketing"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
 
   redis:
     image: redis:7
+    container_name: collings-ticketing-redis
     ports:
-      - "6379:6379"
+      - "6380:6379" # host 6380 -> container 6379
 
 volumes:
-  pgdata:
+  ticketing_pgdata:
