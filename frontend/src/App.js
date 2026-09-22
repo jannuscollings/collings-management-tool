@@ -5,6 +5,9 @@ import LoginPage from "./pages/LoginPage";
 import TicketsPage from "./pages/TicketsPage";
 import WorkspacePage from "./pages/WorkspacePage";
 import WorkItemPage from "./pages/WorkItemPage";
+import RequestsPage from "./pages/RequestsPage";
+import NewRequestPage from "./pages/NewRequestPage";
+import RequestDetailPage from "./pages/RequestDetailPage";
 
 export default function App() {
   return (
@@ -32,6 +35,30 @@ export default function App() {
           element={
             <ProtectedRoute>
               <WorkItemPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/requests"
+          element={
+            <ProtectedRoute>
+              <RequestsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/requests/new"
+          element={
+            <ProtectedRoute>
+              <NewRequestPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/requests/:requestId"
+          element={
+            <ProtectedRoute>
+              <RequestDetailPage />
             </ProtectedRoute>
           }
         />

@@ -106,6 +106,13 @@ export default function TicketsPage() {
         <span className="font-semibold">Open Creative &amp; Design workspace</span>
         <span className="mt-1 block opacity-70">View and manage the new work-item domain.</span>
       </Link>
+      <Link
+        to="/requests"
+        className="mb-6 block rounded-xl border border-black/10 p-4 text-sm transition hover:bg-black/[0.02] dark:border-white/10 dark:hover:bg-white/[0.03]"
+      >
+        <span className="font-semibold">Open Requests</span>
+        <span className="mt-1 block opacity-70">Submit, triage and accept incoming work.</span>
+      </Link>
 
       <form onSubmit={create} className="mb-6 flex flex-col gap-2 sm:flex-row">
         <input

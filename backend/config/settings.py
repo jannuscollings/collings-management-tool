@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     "core",
     "tickets",
     "work",
+    "intake",
 ]
 
 MIDDLEWARE = [

@@ -8,6 +8,7 @@ won't create duplicates). Runs automatically from scripts/setup.sh.
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 
+from intake.models import WorkRequest
 from tickets.models import Ticket
 from work.models import WorkGroup, WorkItem, Workspace
 
@@ -121,6 +122,46 @@ class Command(BaseCommand):
             "Creative & Design workspace ready "
             f"({work_items_made} work items created, "
             f"{len(SAMPLE_WORK_ITEMS) - work_items_made} already present)."
+        ))
+
+        request_samples = (
+            {
+                "title": "Create market update social tiles",
+                "brief": "Prepare a branded set of tiles for the October market update.",
+                "priority": WorkRequest.Priority.MEDIUM,
+                "requested_due_date": "2026-10-12",
+            },
+            {
+                "title": "Prepare 42 Wellington Street launch pack",
+                "brief": "Create the digital launch assets for the new listing.",
+                "priority": WorkRequest.Priority.HIGH,
+                "requested_due_date": "2026-10-05",
+                "status": WorkRequest.Status.TRIAGING,
+                "destination_group": groups["Property launch"],
+                "triage_priority": WorkRequest.Priority.HIGH,
+                "owner": user,
+            },
+        )
+        requests_made = 0
+        for sample in request_samples:
+            title = sample["title"]
+            defaults = {key: value for key, value in sample.items() if key != "title"}
+            defaults.update(
+                {
+                    "request_type": WorkRequest.RequestType.CREATIVE_DESIGN,
+                    "submitted_by": user,
+                }
+            )
+            _, was_created = WorkRequest.objects.get_or_create(
+                title=title,
+                submitted_by=user,
+                defaults=defaults,
+            )
+            requests_made += int(was_created)
+
+        self.stdout.write(self.style.SUCCESS(
+            "Sample work requests ready "
+            f"({requests_made} created, {len(request_samples) - requests_made} already present)."
         ))
         self.stdout.write("")
         self.stdout.write(f"  Demo login:  {DEMO_EMAIL}  /  {DEMO_PASSWORD}")
