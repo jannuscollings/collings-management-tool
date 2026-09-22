@@ -3,6 +3,8 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import LoginPage from "./pages/LoginPage";
 import TicketsPage from "./pages/TicketsPage";
+import WorkspacePage from "./pages/WorkspacePage";
+import WorkItemPage from "./pages/WorkItemPage";
 
 export default function App() {
   return (
@@ -14,6 +16,22 @@ export default function App() {
           element={
             <ProtectedRoute>
               <TicketsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/workspaces/:workspaceSlug"
+          element={
+            <ProtectedRoute>
+              <WorkspacePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/workspaces/:workspaceSlug/items/:itemId"
+          element={
+            <ProtectedRoute>
+              <WorkItemPage />
             </ProtectedRoute>
           }
         />

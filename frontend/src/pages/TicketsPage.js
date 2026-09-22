@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import { LogOut, Moon, Plus, Sun, Trash2 } from "lucide-react";
 
@@ -97,6 +98,14 @@ export default function TicketsPage() {
           </button>
         </div>
       </header>
+
+      <Link
+        to="/workspaces/creative-design"
+        className="mb-6 block rounded-xl border border-primary/40 bg-primary/10 p-4 text-sm transition hover:bg-primary/15"
+      >
+        <span className="font-semibold">Open Creative &amp; Design workspace</span>
+        <span className="mt-1 block opacity-70">View and manage the new work-item domain.</span>
+      </Link>
 
       <form onSubmit={create} className="mb-6 flex flex-col gap-2 sm:flex-row">
         <input
