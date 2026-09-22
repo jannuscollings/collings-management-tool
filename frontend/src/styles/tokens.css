@@ -1,0 +1,29 @@
+:root {
+  --color-brand: 45 200 219;
+  --color-brand-strong: 20 151 168;
+  --color-brand-soft: 234 251 253;
+  --color-navy: 13 36 39;
+  --color-ink: 23 25 27;
+  --color-copy: 80 87 91;
+  --color-muted: 139 146 151;
+  --color-canvas: 245 247 248;
+  --color-surface: 255 255 255;
+  --color-line: 226 230 232;
+  --color-positive: 22 163 106;
+  --color-critical: 220 53 69;
+  --color-caution: 217 144 24;
+  --color-review: 118 87 214;
+  --color-info: 59 130 246;
+}
+
+.dark {
+  --color-brand-soft: 16 55 60;
+  --color-navy: 8 22 24;
+  --color-ink: 244 247 247;
+  --color-copy: 199 210 212;
+  --color-muted: 145 161 164;
+  --color-canvas: 13 27 30;
+  --color-surface: 20 38 41;
+  --color-line: 53 75 79;
+}
+

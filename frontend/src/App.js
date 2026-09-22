@@ -8,6 +8,7 @@ import WorkItemPage from "./pages/WorkItemPage";
 import RequestsPage from "./pages/RequestsPage";
 import NewRequestPage from "./pages/NewRequestPage";
 import RequestDetailPage from "./pages/RequestDetailPage";
+import AppShell from "./components/layout/AppShell";
 
 export default function App() {
   return (
@@ -39,13 +40,14 @@ export default function App() {
           }
         />
         <Route
-          path="/requests"
           element={
             <ProtectedRoute>
-              <RequestsPage />
+              <AppShell />
             </ProtectedRoute>
           }
-        />
+        >
+          <Route path="/requests" element={<RequestsPage />} />
+        </Route>
         <Route
           path="/requests/new"
           element={
