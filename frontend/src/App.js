@@ -24,14 +24,6 @@ export default function App() {
           }
         />
         <Route
-          path="/workspaces/:workspaceSlug/items/:itemId"
-          element={
-            <ProtectedRoute>
-              <WorkItemPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
           element={
             <ProtectedRoute>
               <AppShell />
@@ -42,6 +34,7 @@ export default function App() {
           <Route path="/requests/new" element={<NewRequestPage />} />
           <Route path="/requests/:requestId" element={<RequestDetailPage />} />
           <Route path="/workspaces/:workspaceSlug" element={<WorkspacePage />} />
+          <Route path="/workspaces/:workspaceSlug/items/:itemId" element={<WorkItemPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

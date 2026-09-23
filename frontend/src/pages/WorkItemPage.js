@@ -4,10 +4,37 @@ import toast from "react-hot-toast";
 import { ArrowLeft } from "lucide-react";
 
 import { WORK_PRIORITY_OPTIONS, WORK_STATUS_OPTIONS, workApi } from "../api/work";
+import PageContainer from "../components/layout/PageContainer";
+import Badge from "../components/ui/Badge";
+import { Button } from "../components/ui/Button";
+import { Field, Input, Select, Textarea } from "../components/ui/Field";
+import PageHeader from "../components/ui/PageHeader";
+import Panel from "../components/ui/Panel";
+
+const STATUS_LABELS = {
+  new: "New",
+  in_progress: "In progress",
+  review: "Review",
+  done: "Done",
+};
+
+const STATUS_VARIANTS = {
+  new: "neutral",
+  in_progress: "info",
+  review: "review",
+  done: "success",
+};
+
+const PRIORITY_VARIANTS = {
+  low: "neutral",
+  medium: "neutral",
+  high: "warning",
+};
 
 export default function WorkItemPage() {
   const { workspaceSlug, itemId } = useParams();
   const [item, setItem] = useState(null);
+  const [workspace, setWorkspace] = useState(null);
   const [groups, setGroups] = useState([]);
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState(null);
@@ -25,6 +52,7 @@ export default function WorkItemPage() {
         const data = itemResponse.data;
         if (data.workspace_slug !== workspaceSlug) throw new Error("Workspace mismatch");
         setItem(data);
+        setWorkspace(workspaceResponse.data);
         setGroups(workspaceResponse.data.groups);
         setUsers(usersResponse.data);
         setForm({
@@ -73,31 +101,78 @@ export default function WorkItemPage() {
     }
   };
 
-  if (loading) return <div className="grid h-full place-items-center text-sm opacity-70">Loading…</div>;
-  if (!item || !form) return <div className="p-8 text-sm">Work item unavailable.</div>;
+  if (loading) return <PageContainer className="max-w-4xl text-sm text-muted">Loading work item…</PageContainer>;
+  if (!item || !workspace || !form) return <PageContainer className="max-w-4xl text-sm text-copy">Work item unavailable.</PageContainer>;
 
   return (
-    <div className="mx-auto max-w-3xl p-5 sm:p-8">
-      <Link to={`/workspaces/${workspaceSlug}`} className="mb-5 inline-flex items-center gap-1 text-sm opacity-60 hover:opacity-100">
-        <ArrowLeft className="h-4 w-4" /> {item.group_name}
-      </Link>
-      <header className="mb-7">
-        <p className="font-mono text-xs opacity-60">{item.reference}</p>
-        <h1 className="mt-1 text-2xl font-semibold">{item.title}</h1>
-      </header>
+    <PageContainer className="max-w-4xl">
+      <Button asChild variant="ghost" className="mb-4 -ml-4">
+        <Link to={`/workspaces/${workspaceSlug}`}>
+          <ArrowLeft className="h-4 w-4" /> {workspace.name}
+        </Link>
+      </Button>
+      <PageHeader
+        eyebrow={`Work item · ${item.reference}`}
+        title={item.title}
+        description={`${item.group_name} · ${workspace.name}`}
+        actions={
+          <>
+            <Badge variant={STATUS_VARIANTS[item.status]}>{STATUS_LABELS[item.status]}</Badge>
+            <Badge variant={PRIORITY_VARIANTS[item.priority]} className="capitalize">{item.priority} priority</Badge>
+          </>
+        }
+      />
 
-      <form onSubmit={save} className="grid gap-5 rounded-xl border border-black/10 p-5 dark:border-white/10 sm:grid-cols-2">
-        <label className="text-sm sm:col-span-2"><span className="mb-1 block font-medium">Title</span><input required value={form.title} onChange={updateForm("title")} className="w-full rounded-lg border border-black/10 bg-transparent px-3 py-2 outline-none focus:border-primary dark:border-white/15" /></label>
-        <label className="text-sm sm:col-span-2"><span className="mb-1 block font-medium">Brief</span><textarea rows="5" value={form.brief} onChange={updateForm("brief")} className="w-full rounded-lg border border-black/10 bg-transparent px-3 py-2 outline-none focus:border-primary dark:border-white/15" /></label>
-        <label className="text-sm"><span className="mb-1 block font-medium">Group</span><select value={form.group} onChange={updateForm("group")} className="w-full rounded-lg border border-black/10 bg-transparent px-3 py-2 dark:border-white/15">{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>
-        <label className="text-sm"><span className="mb-1 block font-medium">Status</span><select value={form.status} onChange={updateForm("status")} className="w-full rounded-lg border border-black/10 bg-transparent px-3 py-2 dark:border-white/15">{WORK_STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-        <label className="text-sm"><span className="mb-1 block font-medium">Owner</span><select value={form.owner} onChange={updateForm("owner")} className="w-full rounded-lg border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"><option value="">Unassigned</option>{users.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label>
-        <label className="text-sm"><span className="mb-1 block font-medium">Reviewer</span><select value={form.reviewer} onChange={updateForm("reviewer")} className="w-full rounded-lg border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"><option value="">Unassigned</option>{users.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label>
-        <label className="text-sm"><span className="mb-1 block font-medium">Due date</span><input type="date" value={form.due_date} onChange={updateForm("due_date")} className="w-full rounded-lg border border-black/10 bg-transparent px-3 py-2 dark:border-white/15" /></label>
-        <label className="text-sm"><span className="mb-1 block font-medium">Priority</span><select value={form.priority} onChange={updateForm("priority")} className="w-full rounded-lg border border-black/10 bg-transparent px-3 py-2 dark:border-white/15">{WORK_PRIORITY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-        <div className="sm:col-span-2"><button type="submit" disabled={saving} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-secondary disabled:opacity-50">{saving ? "Saving…" : "Save changes"}</button></div>
-      </form>
-    </div>
+      <Panel className="p-5 sm:p-6">
+        <div className="mb-5 border-b border-line pb-4">
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-brand-strong dark:text-brand">Core details</p>
+          <h2 className="mt-1 text-lg font-extrabold text-ink">Work item properties</h2>
+          <p className="mt-1 text-xs text-muted">Update the delivery details below and save when finished.</p>
+        </div>
+        <form onSubmit={save} className="grid gap-5 sm:grid-cols-2">
+          <Field label="Title" className="sm:col-span-2">
+            <Input required value={form.title} onChange={updateForm("title")} />
+          </Field>
+          <Field label="Group">
+            <Select value={form.group} onChange={updateForm("group")}>
+              {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+            </Select>
+          </Field>
+          <Field label="Status">
+            <Select value={form.status} onChange={updateForm("status")}>
+              {WORK_STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </Select>
+          </Field>
+          <Field label="Priority">
+            <Select value={form.priority} onChange={updateForm("priority")}>
+              {WORK_PRIORITY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </Select>
+          </Field>
+          <Field label="Due date">
+            <Input type="date" value={form.due_date} onChange={updateForm("due_date")} />
+          </Field>
+          <Field label="Owner">
+            <Select value={form.owner} onChange={updateForm("owner")}>
+              <option value="">Unassigned</option>
+              {users.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}
+            </Select>
+          </Field>
+          <Field label="Reviewer">
+            <Select value={form.reviewer} onChange={updateForm("reviewer")}>
+              <option value="">Unassigned</option>
+              {users.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}
+            </Select>
+          </Field>
+          <Field label="Brief" className="sm:col-span-2">
+            <Textarea rows="5" value={form.brief} onChange={updateForm("brief")} />
+          </Field>
+          <div className="flex justify-end sm:col-span-2">
+            <Button type="submit" disabled={saving} className="w-full sm:w-auto">
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
+          </div>
+        </form>
+      </Panel>
+    </PageContainer>
   );
 }
-
