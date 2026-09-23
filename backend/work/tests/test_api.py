@@ -236,6 +236,146 @@ class WorkApiTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual([item["id"] for item in response.data], [matching.pk])
 
+    def test_my_work_returns_owner_and_reviewer_items_once(self):
+        owned = WorkItem.objects.create(
+            group=self.group,
+            title="Owned item",
+            owner=self.user,
+            created_by=self.user,
+        )
+        reviewed = WorkItem.objects.create(
+            group=self.group,
+            title="Reviewed item",
+            reviewer=self.user,
+            created_by=self.assignee,
+        )
+        both = WorkItem.objects.create(
+            group=self.group,
+            title="Owned and reviewed item",
+            owner=self.user,
+            reviewer=self.user,
+            created_by=self.user,
+        )
+        WorkItem.objects.create(
+            group=self.group,
+            title="Unrelated item",
+            owner=self.assignee,
+            created_by=self.assignee,
+        )
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get("/api/work-items/", {"relevance": "mine"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [item["id"] for item in response.data],
+            [both.pk, reviewed.pk, owned.pk],
+        )
+        self.assertEqual(response.data[0]["workspace_name"], "Creative & Design")
+
+    def test_my_work_uses_authenticated_user(self):
+        mine = WorkItem.objects.create(
+            group=self.group,
+            title="My item",
+            owner=self.user,
+            created_by=self.user,
+        )
+        theirs = WorkItem.objects.create(
+            group=self.group,
+            title="Someone else's item",
+            owner=self.assignee,
+            created_by=self.assignee,
+        )
+        self.client.force_authenticate(self.user)
+
+        my_response = self.client.get("/api/work-items/", {"relevance": "mine"})
+        self.client.force_authenticate(self.assignee)
+        their_response = self.client.get("/api/work-items/", {"relevance": "mine"})
+
+        self.assertEqual(my_response.status_code, status.HTTP_200_OK)
+        self.assertEqual([item["id"] for item in my_response.data], [mine.pk])
+        self.assertEqual(their_response.status_code, status.HTTP_200_OK)
+        self.assertEqual([item["id"] for item in their_response.data], [theirs.pk])
+
+    def test_my_work_combines_search_status_and_priority_filters(self):
+        matching = WorkItem.objects.create(
+            group=self.group,
+            title="Harbour campaign artwork",
+            status=WorkItem.Status.REVIEW,
+            priority=WorkItem.Priority.HIGH,
+            reviewer=self.user,
+            created_by=self.assignee,
+        )
+        WorkItem.objects.create(
+            group=self.group,
+            title="Harbour campaign draft",
+            status=WorkItem.Status.NEW,
+            priority=WorkItem.Priority.HIGH,
+            owner=self.user,
+            created_by=self.user,
+        )
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get(
+            "/api/work-items/",
+            {
+                "relevance": "mine",
+                "q": "harbour",
+                "status": WorkItem.Status.REVIEW,
+                "priority": WorkItem.Priority.HIGH,
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual([item["id"] for item in response.data], [matching.pk])
+
+    def test_my_work_excludes_archived_groups_and_workspaces(self):
+        active = WorkItem.objects.create(
+            group=self.group,
+            title="Active item",
+            owner=self.user,
+            created_by=self.user,
+        )
+        archived_group = WorkGroup.objects.create(
+            workspace=self.workspace,
+            name="Archived group",
+            archived=True,
+        )
+        WorkItem.objects.create(
+            group=archived_group,
+            title="Archived group item",
+            owner=self.user,
+            created_by=self.user,
+        )
+        archived_workspace = Workspace.objects.create(
+            name="Archived workspace",
+            slug="archived-workspace",
+            archived=True,
+        )
+        archived_workspace_group = WorkGroup.objects.create(
+            workspace=archived_workspace,
+            name="Group",
+        )
+        WorkItem.objects.create(
+            group=archived_workspace_group,
+            title="Archived workspace item",
+            reviewer=self.user,
+            created_by=self.user,
+        )
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get("/api/work-items/", {"relevance": "mine"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual([item["id"] for item in response.data], [active.pk])
+
+    def test_my_work_rejects_an_unknown_relevance_scope(self):
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get("/api/work-items/", {"relevance": "another-user"})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_seed_demo_is_idempotent_for_work_items(self):
         call_command("seed_demo", verbosity=0)
         call_command("seed_demo", verbosity=0)

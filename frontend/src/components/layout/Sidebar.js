@@ -1,6 +1,6 @@
 import { useDispatch, useSelector } from "react-redux";
 import { NavLink } from "react-router-dom";
-import { Inbox, LogOut, Moon, Palette, Sun, Ticket } from "lucide-react";
+import { Briefcase, Inbox, LogOut, Moon, Palette, Sun, Ticket } from "lucide-react";
 
 import { useTheme } from "../../contexts/ThemeContext";
 import { cn } from "../../lib/cn";
@@ -9,7 +9,10 @@ import { logout } from "../../store/slices/authSlice";
 const groups = [
   {
     label: "Work",
-    items: [{ to: "/requests", label: "Requests", icon: Inbox }],
+    items: [
+      { to: "/my-work", label: "My Work", icon: Briefcase },
+      { to: "/requests", label: "Requests", icon: Inbox },
+    ],
   },
   {
     label: "Workspaces",
@@ -75,4 +78,3 @@ export default function Sidebar() {
     </aside>
   );
 }
-

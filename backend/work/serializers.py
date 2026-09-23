@@ -23,6 +23,7 @@ class WorkItemSerializer(serializers.ModelSerializer):
     created_by_detail = WorkUserSerializer(source="created_by", read_only=True)
     group_name = serializers.CharField(source="group.name", read_only=True)
     workspace_slug = serializers.CharField(source="group.workspace.slug", read_only=True)
+    workspace_name = serializers.CharField(source="group.workspace.name", read_only=True)
 
     class Meta:
         model = WorkItem
@@ -32,6 +33,7 @@ class WorkItemSerializer(serializers.ModelSerializer):
             "group",
             "group_name",
             "workspace_slug",
+            "workspace_name",
             "title",
             "brief",
             "status",
@@ -50,6 +52,7 @@ class WorkItemSerializer(serializers.ModelSerializer):
             "reference",
             "group_name",
             "workspace_slug",
+            "workspace_name",
             "owner_detail",
             "reviewer_detail",
             "created_by_detail",
@@ -87,4 +90,3 @@ class WorkspaceSerializer(serializers.ModelSerializer):
             "work_items__created_by",
         )
         return WorkGroupSerializer(groups, many=True, context=self.context).data
-

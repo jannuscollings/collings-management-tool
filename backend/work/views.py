@@ -34,6 +34,15 @@ class WorkItemViewSet(
     def get_queryset(self):
         queryset = super().get_queryset()
         params = self.request.query_params
+        relevance = params.get("relevance")
+        if relevance:
+            if relevance != "mine":
+                raise ValidationError({"relevance": "Select a valid relevance scope."})
+            queryset = queryset.filter(
+                group__archived=False,
+                group__workspace__archived=False,
+            ).filter(Q(owner=self.request.user) | Q(reviewer=self.request.user))
+
         workspace = params.get("workspace")
         if workspace:
             queryset = queryset.filter(group__workspace__slug=workspace)

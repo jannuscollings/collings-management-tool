@@ -34,6 +34,7 @@ export default function AppShell() {
             </div>
           </div>
           <nav className="flex gap-1 overflow-x-auto px-2 pb-2" aria-label="Mobile navigation">
+            <NavLink to="/my-work" className={mobileLinkClass}>My Work</NavLink>
             <NavLink to="/requests" className={mobileLinkClass}>Requests</NavLink>
             <NavLink to="/workspaces/creative-design" className={mobileLinkClass}>Creative &amp; Design</NavLink>
             <NavLink to="/" end className={mobileLinkClass}>Demo</NavLink>
@@ -46,4 +47,3 @@ export default function AppShell() {
     </div>
   );
 }
-
