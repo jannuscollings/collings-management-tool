@@ -13,6 +13,7 @@ const badgeVariants = cva(
         success: "bg-emerald-50 text-positive dark:bg-emerald-950/50 dark:text-emerald-200",
         danger: "bg-red-50 text-critical dark:bg-red-950/50 dark:text-red-200",
         brand: "bg-brand-soft text-brand-strong dark:text-brand",
+        review: "bg-violet-50 text-review dark:bg-violet-950/50 dark:text-violet-200",
       },
     },
     defaultVariants: {
@@ -24,4 +25,3 @@ const badgeVariants = cva(
 export default function Badge({ className, variant, ...props }) {
   return <span className={cn(badgeVariants({ variant }), className)} {...props} />;
 }
-

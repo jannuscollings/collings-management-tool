@@ -1,14 +1,20 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
-import { ArrowLeft, Plus, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 
 import { WORK_PRIORITY_OPTIONS, workApi } from "../api/work";
+import PageContainer from "../components/layout/PageContainer";
+import Badge from "../components/ui/Badge";
+import { Button } from "../components/ui/Button";
+import { Field, Input, Select, Textarea } from "../components/ui/Field";
+import PageHeader from "../components/ui/PageHeader";
+import Panel from "../components/ui/Panel";
 
-const PRIORITY_STYLES = {
-  low: "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200",
-  medium: "bg-amber-200 text-amber-800 dark:bg-amber-700/40 dark:text-amber-200",
-  high: "bg-red-200 text-red-800 dark:bg-red-700/40 dark:text-red-200",
+const PRIORITY_VARIANTS = {
+  low: "neutral",
+  medium: "neutral",
+  high: "warning",
 };
 
 const STATUS_LABELS = {
@@ -16,6 +22,13 @@ const STATUS_LABELS = {
   in_progress: "In progress",
   review: "Review",
   done: "Done",
+};
+
+const STATUS_VARIANTS = {
+  new: "neutral",
+  in_progress: "info",
+  review: "review",
+  done: "success",
 };
 
 const emptyForm = {
@@ -94,108 +107,111 @@ export default function WorkspacePage() {
     }
   };
 
-  if (loading) return <div className="grid h-full place-items-center text-sm opacity-70">Loading…</div>;
-  if (!workspace) return <div className="p-8 text-sm">Workspace unavailable.</div>;
+  if (loading) return <PageContainer className="text-sm text-muted">Loading workspace…</PageContainer>;
+  if (!workspace) return <PageContainer className="text-sm text-copy">Workspace unavailable.</PageContainer>;
 
   return (
-    <div className="mx-auto max-w-6xl p-5 sm:p-8">
-      <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <Link to="/" className="mb-3 inline-flex items-center gap-1 text-sm opacity-60 hover:opacity-100">
-            <ArrowLeft className="h-4 w-4" /> Tickets
-          </Link>
-          <h1 className="text-2xl font-semibold">{workspace.name}</h1>
-          <p className="mt-1 text-sm opacity-60">Internal work items grouped by delivery stream.</p>
-        </div>
-        <button
-          onClick={() => setShowCreate((visible) => !visible)}
-          className="flex items-center gap-1 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-secondary"
-        >
-          {showCreate ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-          {showCreate ? "Cancel" : "New work item"}
-        </button>
-      </header>
+    <PageContainer>
+      <PageHeader
+        eyebrow="Workspace"
+        title={workspace.name}
+        description="Internal work items grouped by delivery stream."
+        actions={
+          <Button
+            variant={showCreate ? "secondary" : "primary"}
+            onClick={() => setShowCreate((visible) => !visible)}
+          >
+            {showCreate ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+            {showCreate ? "Cancel" : "New work item"}
+          </Button>
+        }
+      />
 
       {showCreate && (
-        <form onSubmit={createItem} className="mb-8 grid gap-4 rounded-xl border border-black/10 p-5 dark:border-white/10 sm:grid-cols-2">
-          <label className="text-sm">
-            <span className="mb-1 block font-medium">Title</span>
-            <input required value={form.title} onChange={updateForm("title")} className="w-full rounded-lg border border-black/10 bg-transparent px-3 py-2 outline-none focus:border-primary dark:border-white/15" />
-          </label>
-          <label className="text-sm">
-            <span className="mb-1 block font-medium">Group</span>
-            <select required value={form.group} onChange={updateForm("group")} className="w-full rounded-lg border border-black/10 bg-transparent px-3 py-2 dark:border-white/15">
+        <Panel className="mb-7 p-5 sm:p-6">
+          <form onSubmit={createItem} className="grid gap-5 sm:grid-cols-2">
+          <Field label="Title">
+            <Input required value={form.title} onChange={updateForm("title")} />
+          </Field>
+          <Field label="Group">
+            <Select required value={form.group} onChange={updateForm("group")}>
               {workspace.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
-            </select>
-          </label>
-          <label className="text-sm sm:col-span-2">
-            <span className="mb-1 block font-medium">Brief</span>
-            <textarea rows="3" value={form.brief} onChange={updateForm("brief")} className="w-full rounded-lg border border-black/10 bg-transparent px-3 py-2 outline-none focus:border-primary dark:border-white/15" />
-          </label>
-          <label className="text-sm">
-            <span className="mb-1 block font-medium">Owner</span>
-            <select value={form.owner} onChange={updateForm("owner")} className="w-full rounded-lg border border-black/10 bg-transparent px-3 py-2 dark:border-white/15">
+            </Select>
+          </Field>
+          <Field label="Brief" className="sm:col-span-2">
+            <Textarea rows="3" value={form.brief} onChange={updateForm("brief")} />
+          </Field>
+          <Field label="Owner">
+            <Select value={form.owner} onChange={updateForm("owner")}>
               <option value="">Unassigned</option>
               {users.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}
-            </select>
-          </label>
-          <label className="text-sm">
-            <span className="mb-1 block font-medium">Reviewer</span>
-            <select value={form.reviewer} onChange={updateForm("reviewer")} className="w-full rounded-lg border border-black/10 bg-transparent px-3 py-2 dark:border-white/15">
+            </Select>
+          </Field>
+          <Field label="Reviewer">
+            <Select value={form.reviewer} onChange={updateForm("reviewer")}>
               <option value="">Unassigned</option>
               {users.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}
-            </select>
-          </label>
-          <label className="text-sm">
-            <span className="mb-1 block font-medium">Due date</span>
-            <input type="date" value={form.due_date} onChange={updateForm("due_date")} className="w-full rounded-lg border border-black/10 bg-transparent px-3 py-2 dark:border-white/15" />
-          </label>
-          <label className="text-sm">
-            <span className="mb-1 block font-medium">Priority</span>
-            <select value={form.priority} onChange={updateForm("priority")} className="w-full rounded-lg border border-black/10 bg-transparent px-3 py-2 dark:border-white/15">
+            </Select>
+          </Field>
+          <Field label="Due date">
+            <Input type="date" value={form.due_date} onChange={updateForm("due_date")} />
+          </Field>
+          <Field label="Priority">
+            <Select value={form.priority} onChange={updateForm("priority")}>
               {WORK_PRIORITY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
-          </label>
+            </Select>
+          </Field>
           <div className="sm:col-span-2">
-            <button type="submit" disabled={saving} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-secondary disabled:opacity-50">
+            <Button type="submit" disabled={saving}>
               {saving ? "Creating…" : "Create work item"}
-            </button>
+            </Button>
           </div>
-        </form>
+          </form>
+        </Panel>
       )}
 
-      <div className="space-y-6">
+      <div className="space-y-5">
         {workspace.groups.map((group) => (
           <section key={group.id}>
-            <div className="mb-2 flex items-center gap-2">
-              <h2 className="font-semibold">{group.name}</h2>
-              <span className="rounded-full bg-black/5 px-2 py-0.5 text-xs dark:bg-white/10">{group.work_items.length}</span>
-            </div>
-            <div className="overflow-x-auto rounded-xl border border-black/10 dark:border-white/10">
-              <table className="w-full min-w-[760px] text-left text-sm">
-                <thead className="bg-black/[0.03] text-xs uppercase tracking-wide opacity-70 dark:bg-white/[0.04]">
-                  <tr><th className="px-4 py-3">Reference</th><th className="px-4 py-3">Title</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Owner</th><th className="px-4 py-3">Due date</th><th className="px-4 py-3">Priority</th></tr>
-                </thead>
-                <tbody className="divide-y divide-black/10 dark:divide-white/10">
-                  {group.work_items.length === 0 ? (
-                    <tr><td colSpan="6" className="px-4 py-6 text-center opacity-50">No work items in this group.</td></tr>
-                  ) : group.work_items.map((item) => (
-                    <tr key={item.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03]">
-                      <td className="px-4 py-3 font-mono text-xs opacity-60">{item.reference}</td>
-                      <td className="px-4 py-3"><Link to={`/workspaces/${workspaceSlug}/items/${item.id}`} className="font-medium hover:text-primary">{item.title}</Link></td>
-                      <td className="px-4 py-3">{STATUS_LABELS[item.status]}</td>
-                      <td className="px-4 py-3">{item.owner_detail?.display_name || "Unassigned"}</td>
-                      <td className="px-4 py-3">{item.due_date || "—"}</td>
-                      <td className="px-4 py-3"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_STYLES[item.priority]}`}>{item.priority}</span></td>
+            <Panel className="overflow-hidden">
+              <div className="flex items-center justify-between gap-3 border-b border-line bg-canvas/55 px-4 py-3">
+                <h2 className="text-[13px] font-extrabold tracking-[0.02em] text-ink">{group.name}</h2>
+                <Badge variant="neutral">{group.work_items.length} {group.work_items.length === 1 ? "item" : "items"}</Badge>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[980px] border-collapse text-left">
+                  <thead className="bg-canvas/35">
+                    <tr className="border-b border-line">
+                      {["Reference", "Work item", "Status", "Priority", "Owner", "Reviewer", "Due date"].map((heading) => (
+                        <th key={heading} className="px-[13px] py-2.5 text-[9.5px] font-extrabold uppercase tracking-[0.08em] text-muted">{heading}</th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-line/70">
+                    {group.work_items.length === 0 ? (
+                      <tr><td colSpan="7" className="px-4 py-6 text-center text-xs text-muted">No work items in this group.</td></tr>
+                    ) : group.work_items.map((item) => (
+                      <tr key={item.id} className="text-[11.5px] text-copy transition-colors hover:bg-brand-soft/35">
+                        <td className="px-[13px] py-3 font-mono text-[10.5px] font-semibold text-muted">
+                          <Link to={`/workspaces/${workspaceSlug}/items/${item.id}`} className="hover:text-brand-strong">{item.reference}</Link>
+                        </td>
+                        <td className="px-[13px] py-3">
+                          <Link to={`/workspaces/${workspaceSlug}/items/${item.id}`} className="font-bold text-ink hover:text-brand-strong">{item.title}</Link>
+                        </td>
+                        <td className="px-[13px] py-3"><Badge variant={STATUS_VARIANTS[item.status]}>{STATUS_LABELS[item.status]}</Badge></td>
+                        <td className="px-[13px] py-3"><Badge variant={PRIORITY_VARIANTS[item.priority]} className="capitalize">{item.priority}</Badge></td>
+                        <td className="px-[13px] py-3">{item.owner_detail?.display_name || "Unassigned"}</td>
+                        <td className="px-[13px] py-3">{item.reviewer_detail?.display_name || "Unassigned"}</td>
+                        <td className="px-[13px] py-3">{item.due_date || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Panel>
           </section>
         ))}
       </div>
-    </div>
+    </PageContainer>
   );
 }
-
