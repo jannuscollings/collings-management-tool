@@ -8,6 +8,11 @@ import {
   REQUEST_TYPE_OPTIONS,
   workRequestsApi,
 } from "../api/workRequests";
+import PageContainer from "../components/layout/PageContainer";
+import { Button } from "../components/ui/Button";
+import { Field, Input, Select, Textarea } from "../components/ui/Field";
+import PageHeader from "../components/ui/PageHeader";
+import Panel from "../components/ui/Panel";
 
 export default function NewRequestPage() {
   const navigate = useNavigate();
@@ -44,20 +49,43 @@ export default function NewRequestPage() {
   };
 
   return (
-    <div className="mx-auto max-w-2xl p-5 sm:p-8">
-      <Link to="/requests" className="mb-5 inline-flex items-center gap-1 text-sm opacity-60 hover:opacity-100">
-        <ArrowLeft className="h-4 w-4" /> Requests
-      </Link>
-      <header className="mb-7"><h1 className="text-2xl font-semibold">Submit a work request</h1><p className="mt-1 text-sm opacity-60">Send a Creative &amp; Design request for triage.</p></header>
-      <form onSubmit={submit} className="grid gap-5 rounded-xl border border-black/10 p-5 dark:border-white/10 sm:grid-cols-2">
-        <label className="text-sm sm:col-span-2"><span className="mb-1 block font-medium">Request title</span><input required value={form.title} onChange={updateForm("title")} className="w-full rounded-lg border border-black/10 bg-transparent px-3 py-2 outline-none focus:border-primary dark:border-white/15" /></label>
-        <label className="text-sm sm:col-span-2"><span className="mb-1 block font-medium">Brief</span><textarea rows="5" value={form.brief} onChange={updateForm("brief")} className="w-full rounded-lg border border-black/10 bg-transparent px-3 py-2 outline-none focus:border-primary dark:border-white/15" /></label>
-        <label className="text-sm"><span className="mb-1 block font-medium">Request type</span><select value={form.request_type} onChange={updateForm("request_type")} className="w-full rounded-lg border border-black/10 bg-transparent px-3 py-2 dark:border-white/15">{REQUEST_TYPE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-        <label className="text-sm"><span className="mb-1 block font-medium">Priority</span><select value={form.priority} onChange={updateForm("priority")} className="w-full rounded-lg border border-black/10 bg-transparent px-3 py-2 dark:border-white/15">{REQUEST_PRIORITY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-        <label className="text-sm"><span className="mb-1 block font-medium">Requested due date</span><input type="date" value={form.requested_due_date} onChange={updateForm("requested_due_date")} className="w-full rounded-lg border border-black/10 bg-transparent px-3 py-2 dark:border-white/15" /></label>
-        <div className="self-end"><button type="submit" disabled={saving} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-secondary disabled:opacity-50">{saving ? "Submitting…" : "Submit request"}</button></div>
-      </form>
-    </div>
+    <PageContainer className="max-w-3xl">
+      <Button asChild variant="ghost" className="mb-4 -ml-4">
+        <Link to="/requests"><ArrowLeft className="h-4 w-4" /> Requests</Link>
+      </Button>
+      <PageHeader
+        eyebrow="Request intake"
+        title="Submit a work request"
+        description="Send a Creative & Design request for triage."
+      />
+      <Panel className="p-5 sm:p-6">
+        <form onSubmit={submit} className="grid gap-5 sm:grid-cols-2">
+          <Field label="Request title" className="sm:col-span-2">
+            <Input required value={form.title} onChange={updateForm("title")} />
+          </Field>
+          <Field label="Brief" className="sm:col-span-2">
+            <Textarea rows="5" value={form.brief} onChange={updateForm("brief")} />
+          </Field>
+          <Field label="Request type">
+            <Select value={form.request_type} onChange={updateForm("request_type")}>
+              {REQUEST_TYPE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </Select>
+          </Field>
+          <Field label="Priority">
+            <Select value={form.priority} onChange={updateForm("priority")}>
+              {REQUEST_PRIORITY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </Select>
+          </Field>
+          <Field label="Requested due date">
+            <Input type="date" value={form.requested_due_date} onChange={updateForm("requested_due_date")} />
+          </Field>
+          <div className="flex items-end sm:justify-end">
+            <Button type="submit" disabled={saving} className="w-full sm:w-auto">
+              {saving ? "Submitting…" : "Submit request"}
+            </Button>
+          </div>
+        </form>
+      </Panel>
+    </PageContainer>
   );
 }
-

@@ -47,23 +47,9 @@ export default function App() {
           }
         >
           <Route path="/requests" element={<RequestsPage />} />
+          <Route path="/requests/new" element={<NewRequestPage />} />
+          <Route path="/requests/:requestId" element={<RequestDetailPage />} />
         </Route>
-        <Route
-          path="/requests/new"
-          element={
-            <ProtectedRoute>
-              <NewRequestPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/requests/:requestId"
-          element={
-            <ProtectedRoute>
-              <RequestDetailPage />
-            </ProtectedRoute>
-          }
-        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
