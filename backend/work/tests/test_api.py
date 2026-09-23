@@ -101,6 +101,141 @@ class WorkApiTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
         self.assertTrue(WorkItem.objects.filter(pk=item.pk).exists())
 
+    def test_work_item_list_requires_authentication(self):
+        response = self.client.get("/api/work-items/")
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_work_item_list_preserves_unfiltered_behavior_and_ordering(self):
+        older = WorkItem.objects.create(
+            group=self.group,
+            title="Older item",
+            created_by=self.user,
+        )
+        newer = WorkItem.objects.create(
+            group=self.group,
+            title="Newer item",
+            created_by=self.user,
+        )
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get("/api/work-items/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual([item["id"] for item in response.data], [newer.pk, older.pk])
+
+    def test_work_item_list_filters_by_workspace(self):
+        creative_item = WorkItem.objects.create(
+            group=self.group,
+            title="Creative item",
+            created_by=self.user,
+        )
+        other_workspace = Workspace.objects.create(name="Video", slug="video")
+        other_group = WorkGroup.objects.create(workspace=other_workspace, name="Production")
+        WorkItem.objects.create(
+            group=other_group,
+            title="Video item",
+            created_by=self.user,
+        )
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get("/api/work-items/", {"workspace": "creative-design"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual([item["id"] for item in response.data], [creative_item.pk])
+
+    def test_work_item_list_filters_by_status_priority_and_owner(self):
+        matching = WorkItem.objects.create(
+            group=self.group,
+            title="Matching item",
+            status=WorkItem.Status.IN_PROGRESS,
+            priority=WorkItem.Priority.HIGH,
+            owner=self.assignee,
+            created_by=self.user,
+        )
+        WorkItem.objects.create(
+            group=self.group,
+            title="Different item",
+            status=WorkItem.Status.NEW,
+            priority=WorkItem.Priority.LOW,
+            created_by=self.user,
+        )
+        self.client.force_authenticate(self.user)
+
+        cases = (
+            ({"status": WorkItem.Status.IN_PROGRESS}, matching.pk),
+            ({"priority": WorkItem.Priority.HIGH}, matching.pk),
+            ({"owner": self.assignee.pk}, matching.pk),
+        )
+        for query, expected_id in cases:
+            with self.subTest(query=query):
+                response = self.client.get("/api/work-items/", query)
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.assertEqual([item["id"] for item in response.data], [expected_id])
+
+    def test_work_item_list_searches_reference_title_and_brief(self):
+        reference_match = WorkItem.objects.create(
+            group=self.group,
+            title="Reference target",
+            created_by=self.user,
+        )
+        title_match = WorkItem.objects.create(
+            group=self.group,
+            title="Seasonal brochure artwork",
+            created_by=self.user,
+        )
+        brief_match = WorkItem.objects.create(
+            group=self.group,
+            title="Generic title",
+            brief="Prepare vendor campaign materials",
+            created_by=self.user,
+        )
+        self.client.force_authenticate(self.user)
+
+        cases = (
+            (reference_match.reference.lower(), reference_match.pk),
+            ("BROCHURE", title_match.pk),
+            ("vendor campaign", brief_match.pk),
+        )
+        for query, expected_id in cases:
+            with self.subTest(query=query):
+                response = self.client.get("/api/work-items/", {"q": query})
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.assertEqual([item["id"] for item in response.data], [expected_id])
+
+    def test_work_item_list_combines_allowlisted_filters(self):
+        matching = WorkItem.objects.create(
+            group=self.group,
+            title="Harbour launch suite",
+            brief="Creative campaign",
+            status=WorkItem.Status.REVIEW,
+            priority=WorkItem.Priority.HIGH,
+            owner=self.assignee,
+            created_by=self.user,
+        )
+        WorkItem.objects.create(
+            group=self.group,
+            title="Harbour launch suite without owner",
+            status=WorkItem.Status.REVIEW,
+            priority=WorkItem.Priority.HIGH,
+            created_by=self.user,
+        )
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get(
+            "/api/work-items/",
+            {
+                "workspace": "creative-design",
+                "status": WorkItem.Status.REVIEW,
+                "priority": WorkItem.Priority.HIGH,
+                "owner": self.assignee.pk,
+                "q": "harbour",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual([item["id"] for item in response.data], [matching.pk])
+
     def test_seed_demo_is_idempotent_for_work_items(self):
         call_command("seed_demo", verbosity=0)
         call_command("seed_demo", verbosity=0)

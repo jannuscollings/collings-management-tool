@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
-import { Plus, X } from "lucide-react";
+import { Plus, Search, X } from "lucide-react";
 
-import { WORK_PRIORITY_OPTIONS, workApi } from "../api/work";
+import { WORK_PRIORITY_OPTIONS, WORK_STATUS_OPTIONS, workApi } from "../api/work";
 import PageContainer from "../components/layout/PageContainer";
 import Badge from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
@@ -44,37 +44,106 @@ const emptyForm = {
 export default function WorkspacePage() {
   const { workspaceSlug } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [workspace, setWorkspace] = useState(null);
+  const [workItems, setWorkItems] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [itemsLoading, setItemsLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(emptyForm);
 
-  const load = async () => {
-    try {
-      const [workspaceResponse, usersResponse] = await Promise.all([
-        workApi.getWorkspace(workspaceSlug),
-        workApi.listUsers(),
-      ]);
-      setWorkspace(workspaceResponse.data);
-      setUsers(usersResponse.data);
-      setForm((current) => ({
-        ...current,
-        group: current.group || String(workspaceResponse.data.groups[0]?.id || ""),
-      }));
-    } catch {
-      toast.error("Couldn't load the workspace");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const querySearch = searchParams.get("q") || "";
+  const statusFilter = searchParams.get("status") || "";
+  const priorityFilter = searchParams.get("priority") || "";
+  const ownerFilter = searchParams.get("owner") || "";
+  const [searchInput, setSearchInput] = useState(querySearch);
+  const hasActiveFilters = Boolean(querySearch || statusFilter || priorityFilter || ownerFilter);
 
   useEffect(() => {
-    load();
-    // Reload when navigating between workspace slugs.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let active = true;
+    setLoading(true);
+    Promise.all([workApi.getWorkspace(workspaceSlug), workApi.listUsers()])
+      .then(([workspaceResponse, usersResponse]) => {
+        if (!active) return;
+        setWorkspace(workspaceResponse.data);
+        setUsers(usersResponse.data);
+        setForm((current) => ({
+          ...current,
+          group: current.group || String(workspaceResponse.data.groups[0]?.id || ""),
+        }));
+      })
+      .catch(() => {
+        if (active) toast.error("Couldn't load the workspace");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [workspaceSlug]);
+
+  useEffect(() => {
+    let active = true;
+    setItemsLoading(true);
+    workApi.listWorkItems({
+      workspace: workspaceSlug,
+      ...(querySearch && { q: querySearch }),
+      ...(statusFilter && { status: statusFilter }),
+      ...(priorityFilter && { priority: priorityFilter }),
+      ...(ownerFilter && { owner: ownerFilter }),
+    })
+      .then(({ data }) => {
+        if (active) setWorkItems(data);
+      })
+      .catch(() => {
+        if (active) toast.error("Couldn't filter the work items");
+      })
+      .finally(() => {
+        if (active) setItemsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [workspaceSlug, querySearch, statusFilter, priorityFilter, ownerFilter]);
+
+  useEffect(() => {
+    setSearchInput(querySearch);
+  }, [querySearch]);
+
+  useEffect(() => {
+    const normalizedSearch = searchInput.trim();
+    if (normalizedSearch === querySearch) return undefined;
+    const timeout = window.setTimeout(() => {
+      const next = new URLSearchParams(searchParams);
+      if (normalizedSearch) next.set("q", normalizedSearch);
+      else next.delete("q");
+      setSearchParams(next);
+    }, 300);
+    return () => window.clearTimeout(timeout);
+  }, [querySearch, searchInput, searchParams, setSearchParams]);
+
+  const filteredGroups = useMemo(() => {
+    if (!workspace) return [];
+    return workspace.groups.map((group) => ({
+      ...group,
+      work_items: workItems.filter((item) => item.group === group.id),
+    }));
+  }, [workspace, workItems]);
+
+  const updateFilter = (key) => (event) => {
+    const next = new URLSearchParams(searchParams);
+    if (event.target.value) next.set(key, event.target.value);
+    else next.delete(key);
+    setSearchParams(next);
+  };
+
+  const clearFilters = () => {
+    setSearchInput("");
+    setSearchParams({});
+  };
 
   const updateForm = (field) => (event) => {
     setForm((current) => ({ ...current, [field]: event.target.value }));
@@ -97,7 +166,6 @@ export default function WorkspacePage() {
       toast.success(`${data.reference} created`);
       setShowCreate(false);
       setForm({ ...emptyForm, group: form.group });
-      await load();
       navigate(`/workspaces/${workspaceSlug}/items/${data.id}`);
     } catch (error) {
       const message = error.response?.data?.title?.[0] || "Couldn't create the work item";
@@ -170,8 +238,53 @@ export default function WorkspacePage() {
         </Panel>
       )}
 
-      <div className="space-y-5">
-        {workspace.groups.map((group) => (
+      <Panel className="mb-5 p-4">
+        <div className="grid gap-3 sm:grid-cols-2 shell:grid-cols-[minmax(230px,2fr)_repeat(3,minmax(140px,1fr))_auto] shell:items-end">
+          <Field label="Search">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+              <Input
+                type="search"
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder="Reference, title or brief"
+                className="pl-9"
+              />
+            </div>
+          </Field>
+          <Field label="Status">
+            <Select value={statusFilter} onChange={updateFilter("status")}>
+              <option value="">All statuses</option>
+              {WORK_STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </Select>
+          </Field>
+          <Field label="Priority">
+            <Select value={priorityFilter} onChange={updateFilter("priority")}>
+              <option value="">All priorities</option>
+              {WORK_PRIORITY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </Select>
+          </Field>
+          <Field label="Owner">
+            <Select value={ownerFilter} onChange={updateFilter("owner")}>
+              <option value="">All owners</option>
+              {users.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}
+            </Select>
+          </Field>
+          <Button
+            variant="ghost"
+            onClick={clearFilters}
+            disabled={!hasActiveFilters}
+            className="sm:self-end"
+          >
+            <X className="h-4 w-4" />
+            Clear
+          </Button>
+        </div>
+        {itemsLoading && <p className="mt-2 text-[10.5px] text-muted">Updating work items…</p>}
+      </Panel>
+
+      <div className={`space-y-5 transition-opacity ${itemsLoading ? "opacity-70" : "opacity-100"}`}>
+        {filteredGroups.map((group) => (
           <section key={group.id}>
             <Panel className="overflow-hidden">
               <div className="flex items-center justify-between gap-3 border-b border-line bg-canvas/55 px-4 py-3">
@@ -189,7 +302,11 @@ export default function WorkspacePage() {
                   </thead>
                   <tbody className="divide-y divide-line/70">
                     {group.work_items.length === 0 ? (
-                      <tr><td colSpan="7" className="px-4 py-6 text-center text-xs text-muted">No work items in this group.</td></tr>
+                      <tr>
+                        <td colSpan="7" className="px-4 py-6 text-center text-xs text-muted">
+                          {hasActiveFilters ? "No work items match the current filters." : "No work items in this group."}
+                        </td>
+                      </tr>
                     ) : group.work_items.map((item) => (
                       <tr key={item.id} className="text-[11.5px] text-copy transition-colors hover:bg-brand-soft/35">
                         <td className="px-[13px] py-3 font-mono text-[10.5px] font-semibold text-muted">
