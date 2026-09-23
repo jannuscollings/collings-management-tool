@@ -11,3 +11,4 @@ db.sqlite3-journal
 /media/
 .DS_Store
 celerybeat-schedule*
+.env.backup
