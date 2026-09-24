@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
 from .access import is_admin, visible_items, can_edit
 from .services import record_activity, record_changes
-from .models import SubWork
+from .models import SubWork, WorkComment
 from .serializers import SubWorkSerializer, WorkCommentSerializer, WorkActivitySerializer, WorkLinkSerializer
 from rest_framework import mixins, viewsets
 from rest_framework.exceptions import ValidationError
@@ -205,14 +205,42 @@ class WorkItemViewSet(
     @action(detail=True, methods=["get", "post"])
     @transaction.atomic
     def comments(self, request, pk=None):
-        item = self.get_object()
+        item = self.locked_item() if request.method == 'POST' else self.get_object()
+        context = {'request': request, 'item': item}
         if request.method == "POST":
-            serializer = WorkCommentSerializer(data=request.data)
+            serializer = WorkCommentSerializer(data=request.data, context=context)
             serializer.is_valid(raise_exception=True)
             serializer.save(work_item=item, author=request.user)
-            record_activity(item, request.user, "comment_added")
+            record_activity(item, request.user, "reply_added" if serializer.instance.parent_id else "comment_added", comment_id=serializer.instance.pk)
             return Response(serializer.data, status=201)
-        return Response(WorkCommentSerializer(item.comments.select_related("author"), many=True).data)
+        return Response(WorkCommentSerializer(item.comments.select_related("author").prefetch_related('mentions'), many=True, context=context).data)
+
+    @action(detail=True, methods=['patch', 'delete'], url_path=r'comments/(?P<comment_id>[0-9]+)')
+    @transaction.atomic
+    def edit_comment(self, request, pk=None, comment_id=None):
+        item = self.locked_item()
+        comment = get_object_or_404(WorkComment.objects.select_for_update(), pk=comment_id, work_item=item)
+        if comment.author_id != request.user.pk and not is_admin(request.user):
+            raise PermissionDenied('Only the author or an administrator can manage this comment.')
+        if request.method == 'DELETE':
+            if not comment.deleted_at:
+                comment.deleted_at = timezone.now()
+                comment.body = ''
+                comment.save(update_fields=('deleted_at', 'body'))
+                comment.mentions.clear()
+                record_activity(item, request.user, 'comment_deleted', comment_id=comment.pk)
+            return Response(status=204)
+        if comment.deleted_at:
+            return Response({'detail': 'Deleted comments cannot be edited.'}, status=409)
+        serializer = WorkCommentSerializer(comment, data=request.data, partial=True, context={'request': request, 'item': item})
+        serializer.is_valid(raise_exception=True)
+        before = (comment.body, set(comment.mentions.values_list('pk', flat=True)))
+        serializer.save()
+        if before != (comment.body, set(comment.mentions.values_list('pk', flat=True))):
+            comment.edited_at = timezone.now()
+            comment.save(update_fields=('edited_at',))
+            record_activity(item, request.user, 'comment_edited', comment_id=comment.pk)
+        return Response(serializer.data)
 
     @action(detail=True, methods=["get"])
     def activity(self, request, pk=None):

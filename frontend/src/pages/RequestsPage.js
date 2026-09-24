@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import { Plus } from "lucide-react";
 
 import { workRequestsApi } from "../api/workRequests";
 import PageContainer from "../components/layout/PageContainer";
-import { DrawerLink } from "../components/work/WorkItemDrawer";
+import { DrawerLink, RequestLink, useWorkItemContext } from "../components/work/WorkItemDrawer";
 import Badge from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import PageHeader from "../components/ui/PageHeader";
@@ -21,6 +20,7 @@ const STATUS_VARIANTS = {
 const PRIORITY_VARIANTS = { high: "warning", medium: "neutral", low: "neutral" };
 
 export default function RequestsPage() {
+  const { requestRevision } = useWorkItemContext();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -36,7 +36,7 @@ export default function RequestsPage() {
       }
     };
     load();
-  }, []);
+  }, [requestRevision]);
 
   return (
     <PageContainer>
@@ -69,9 +69,9 @@ export default function RequestsPage() {
               <tbody className="divide-y divide-line/70">
                 {requests.map((request) => (
                   <tr key={request.id} className="text-[11.5px] text-copy transition-colors hover:bg-brand-soft/35">
-                    <td className="px-[13px] py-3 font-mono text-[10.5px] font-semibold text-muted">{request.reference}</td>
+                    <td className="px-[13px] py-3 font-mono text-[10.5px] font-semibold text-muted"><RequestLink request={request} className="hover:text-brand-strong">{request.reference}</RequestLink></td>
                     <td className="px-[13px] py-3">
-                      <Link to={`/requests/${request.id}`} className="font-bold text-ink hover:text-brand-strong">{request.title}</Link>
+                      <RequestLink request={request} className="font-bold text-ink hover:text-brand-strong">{request.title}</RequestLink>
                       <span className="mt-0.5 block text-[10px] text-muted">{request.request_type_label}</span>
                     </td>
                     <td className="px-[13px] py-3"><Badge variant={STATUS_VARIANTS[request.status]}>{request.status_label}</Badge></td>

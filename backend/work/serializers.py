@@ -193,11 +193,32 @@ class SubWorkSerializer(serializers.ModelSerializer):
 class WorkCommentSerializer(serializers.ModelSerializer):
     author_detail = WorkUserSerializer(source="author", read_only=True)
     body = serializers.CharField(max_length=10000, allow_blank=False)
+    mentions = serializers.PrimaryKeyRelatedField(queryset=User.objects.filter(is_active=True), many=True, required=False)
+    mention_details = WorkUserSerializer(source='mentions', many=True, read_only=True)
+    can_manage = serializers.SerializerMethodField()
+
+    def get_can_manage(self, comment):
+        user = self.context['request'].user
+        return not comment.deleted_at and (comment.author_id == user.pk or is_admin(user))
+
+    def validate(self, attrs):
+        if self.instance and 'parent' in attrs and attrs['parent'] != self.instance.parent:
+            raise serializers.ValidationError({'parent': 'Replies cannot be moved.'})
+        parent = attrs.get('parent')
+        if parent and (parent.work_item_id != self.context['item'].pk or parent.parent_id or parent.deleted_at):
+            raise serializers.ValidationError({'parent': 'Reply to an active top-level comment on this work item.'})
+        return attrs
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.deleted_at:
+            data.update(body='', mentions=[], mention_details=[])
+        return data
 
     class Meta:
         model = WorkComment
-        fields = ("id", "author_detail", "body", "created_at")
-        read_only_fields = ("id", "created_at")
+        fields = ("id", "author_detail", "body", "created_at", "parent", "mentions", "mention_details", "edited_at", "deleted_at", "can_manage")
+        read_only_fields = ("id", "created_at", "edited_at", "deleted_at")
 
 
 class WorkActivitySerializer(serializers.ModelSerializer):

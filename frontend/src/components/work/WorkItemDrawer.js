@@ -1,14 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import NewRequestForm from "../requests/NewRequestForm";
+import RequestDetailPanel from "../requests/RequestDetailPanel";
 import NewWorkItemForm from "./NewWorkItemForm";
 import WorkItemPanel from "./WorkItemPanel";
 import WorkspaceManagerPanel from "./WorkspaceManagerPanel";
 import { workApi } from "../../api/work";
 
-const WorkItemContext = createContext({ revision: 0, workspaceRevision: 0, workspaces: [] });
+const WorkItemContext = createContext({ revision: 0, requestRevision: 0, workspaceRevision: 0, workspaces: [] });
 export const useWorkItemContext = () => useContext(WorkItemContext);
 
 export function WorkItemLink({ item, children, ...props }) {
@@ -16,7 +17,18 @@ export function WorkItemLink({ item, children, ...props }) {
   const query = new URLSearchParams(location.search);
   query.delete("drawer");
   query.delete("drawerWorkspace");
+  query.delete("request");
   query.set("item", item.id);
+  return <Link {...props} to={{ pathname: location.pathname, search: query.toString() }}>{children}</Link>;
+}
+
+export function RequestLink({ request, children, ...props }) {
+  const location = useLocation();
+  const query = new URLSearchParams(location.search);
+  query.delete("item");
+  query.delete("drawer");
+  query.delete("drawerWorkspace");
+  query.set("request", request.id);
   return <Link {...props} to={{ pathname: location.pathname, search: query.toString() }}>{children}</Link>;
 }
 
@@ -24,6 +36,7 @@ export function DrawerLink({ drawer, drawerParams = {}, children, ...props }) {
   const location = useLocation();
   const query = new URLSearchParams(location.search);
   query.delete("item");
+  query.delete("request");
   query.delete("drawerWorkspace");
   query.set("drawer", drawer);
   Object.entries(drawerParams).forEach(([key, value]) => query.set(key, value));
@@ -32,11 +45,12 @@ export function DrawerLink({ drawer, drawerParams = {}, children, ...props }) {
 
 export default function WorkItemDrawer({ children }) {
   const [params, setParams] = useSearchParams();
-  const navigate = useNavigate();
   const itemId = params.get("item");
+  const requestId = params.get("request");
   const drawer = params.get("drawer");
   const drawerWorkspace = params.get("drawerWorkspace");
   const [revision, setRevision] = useState(0);
+  const [requestRevision, setRequestRevision] = useState(0);
   const [workspaceRevision, setWorkspaceRevision] = useState(0);
   const [workspaces, setWorkspaces] = useState([]);
   const dirty = useRef(false);
@@ -49,16 +63,28 @@ export default function WorkItemDrawer({ children }) {
       .catch(() => { if (active) setWorkspaces([]); });
     return () => { active = false; };
   }, [workspaceRevision]);
-  useEffect(() => { dirty.current = false; busy.current = false; }, [itemId, drawer]);
+  useEffect(() => { dirty.current = false; busy.current = false; }, [itemId, requestId, drawer]);
   const close = () => {
     if (busy.current) return;
     if (dirty.current && !window.confirm("Discard unsaved changes?")) return;
     const next = new URLSearchParams(params);
     next.delete("item");
+    next.delete("request");
     next.delete("drawer");
     next.delete("drawerWorkspace");
     setParams(next);
     dirty.current = false;
+  };
+  const openRequest = (request) => {
+    dirty.current = false;
+    busy.current = false;
+    const next = new URLSearchParams(params);
+    next.delete("item");
+    next.delete("drawer");
+    next.delete("drawerWorkspace");
+    next.set("request", request.id);
+    setRequestRevision((value) => value + 1);
+    setParams(next, { replace: true });
   };
   const setDirty = useCallback((value) => { dirty.current = value; }, []);
   const setBusy = useCallback((value) => { busy.current = value; }, []);
@@ -66,6 +92,7 @@ export default function WorkItemDrawer({ children }) {
     dirty.current = false;
     busy.current = false;
     const next = new URLSearchParams(params);
+    next.delete("request");
     next.delete("drawer");
     next.delete("drawerWorkspace");
     next.set("item", item.id);
@@ -79,11 +106,13 @@ export default function WorkItemDrawer({ children }) {
   };
   const [title, description] = itemId
     ? ["Work item", "Delivery details, collaboration and review"]
+    : requestId
+      ? ["Request", "Submitted details, triage and delivery outcome"]
     : titles[drawer] || ["Panel", ""];
   return (
-    <WorkItemContext.Provider value={{ revision, workspaceRevision, workspaces }}>
+    <WorkItemContext.Provider value={{ revision, requestRevision, workspaceRevision, workspaces }}>
       {children}
-      <Dialog.Root open={Boolean(itemId || drawer)} onOpenChange={(open) => { if (!open) close(); }}>
+      <Dialog.Root open={Boolean(itemId || requestId || drawer)} onOpenChange={(open) => { if (!open) close(); }}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-[2px]" />
           <Dialog.Content
@@ -103,17 +132,21 @@ export default function WorkItemDrawer({ children }) {
                 onChanged={() => setRevision((value) => value + 1)}
                 onDirty={setDirty}
                 onBusy={setBusy} drawer />}
-              {!itemId && drawer === "new-work-item" && drawerWorkspace && (
+              {!itemId && requestId && <RequestDetailPanel key={requestId} requestId={requestId}
+                onChanged={() => setRequestRevision((value) => value + 1)}
+                onDirty={setDirty}
+                onBusy={setBusy} drawer />}
+              {!itemId && !requestId && drawer === "new-work-item" && drawerWorkspace && (
                 <NewWorkItemForm workspaceSlug={drawerWorkspace} onCreated={openItem} onDirty={setDirty} onBusy={setBusy} />
               )}
-              {!itemId && drawer === "new-request" && (
+              {!itemId && !requestId && drawer === "new-request" && (
                 <NewRequestForm
-                  onCreated={(request) => { dirty.current = false; navigate(`/requests/${request.id}`); }}
+                  onCreated={openRequest}
                   onDirty={setDirty}
                   onBusy={setBusy}
                 />
               )}
-              {!itemId && drawer === "workspaces" && (
+              {!itemId && !requestId && drawer === "workspaces" && (
                 <WorkspaceManagerPanel
                   onChanged={() => setWorkspaceRevision((value) => value + 1)}
                   onDirty={setDirty}

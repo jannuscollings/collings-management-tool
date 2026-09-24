@@ -3,6 +3,8 @@ import api from "./index";
 export const workApi = {
   listComments: (id) => api.get(`/api/work-items/${id}/comments/`),
   createComment: (id, payload) => api.post(`/api/work-items/${id}/comments/`, payload),
+  editComment: (id, commentId, payload) => api.patch(`/api/work-items/${id}/comments/${commentId}/`, payload),
+  deleteComment: (id, commentId) => api.delete(`/api/work-items/${id}/comments/${commentId}/`),
   listActivity: (id) => api.get(`/api/work-items/${id}/activity/`),
   listSubWork: (id) => api.get(`/api/work-items/${id}/sub-work/`),
   createSubWork: (id, payload) => api.post(`/api/work-items/${id}/sub-work/`, payload),

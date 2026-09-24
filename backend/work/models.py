@@ -114,6 +114,10 @@ class SubWork(models.Model):
 
 
 class WorkComment(models.Model):
+    parent = models.ForeignKey('self', null=True, blank=True, on_delete=models.PROTECT, related_name='replies')
+    mentions = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name='work_mentions')
+    edited_at = models.DateTimeField(null=True, blank=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
     work_item = models.ForeignKey(WorkItem, on_delete=models.CASCADE, related_name="comments")
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     body = models.TextField(max_length=10000)

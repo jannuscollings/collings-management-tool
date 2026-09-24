@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import { Link } from "react-router-dom";
-import { Check, ExternalLink, Loader2, MessageSquare, Pencil, Plus, X } from "lucide-react";
+import { Check, ExternalLink, Loader2, Pencil, Plus, X } from "lucide-react";
+import WorkDiscussion from "./WorkDiscussion";
 import toast from "react-hot-toast";
 import { workApi, WORK_STATUS_OPTIONS, WORK_PRIORITY_OPTIONS } from "../../api/work";
 import Badge from "../ui/Badge";
@@ -19,6 +20,7 @@ const errorMessage = (error) => {
   return Object.entries(data).map(([key, value]) => `${key.replaceAll('_', ' ')}: ${Array.isArray(value) ? value.join(' ') : value}`).join(' · ');
 };
 const activityLabels = {
+  reply_added: "Replied to a comment", comment_edited: "Edited a comment", comment_deleted: "Deleted a comment",
   created: "Created this work item", status_changed: "Changed status", review_submitted: "Submitted for review",
   approved: "Approved the work", changes_requested: "Requested changes", owner_id_changed: "Changed owner",
   reviewer_id_changed: "Changed reviewer", priority_changed: "Changed priority", due_date_changed: "Changed due date",
@@ -86,7 +88,6 @@ export default function WorkItemPanel({ itemId, expectedWorkspace, drawer, onCha
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [tab, setTab] = useState('overview');
-  const [body, setBody] = useState('');
   const [subTitle, setSubTitle] = useState('');
   const [subAssignee, setSubAssignee] = useState('');
   const [linkLabel, setLinkLabel] = useState('');
@@ -164,10 +165,7 @@ export default function WorkItemPanel({ itemId, expectedWorkspace, drawer, onCha
         {permissions.edit && <form className="mt-4 grid gap-2 border-t border-line pt-4 sm:grid-cols-2" onSubmit={async (event) => { event.preventDefault(); if (await run(() => workApi.createLink(itemId, { label: linkLabel.trim(), url: linkUrl.trim() }))) { setLinkLabel(''); setLinkUrl(''); } }}><Input aria-label="Link label" placeholder="Label" required maxLength={160} value={linkLabel} onChange={(event) => setLinkLabel(event.target.value)} /><Input aria-label="Link URL" type="url" placeholder="https://…" required maxLength={2000} value={linkUrl} onChange={(event) => setLinkUrl(event.target.value)} /><Button type="submit" variant="secondary" disabled={busy} className="sm:col-span-2 sm:justify-self-end">Add link</Button></form>}
       </Section>
     </>}
-    {tab === 'updates' && <Section title="Updates & comments" description="Keep discussion attached to the work.">
-      {comments.length ? <ol className="space-y-5">{comments.map((comment) => <li key={comment.id}><div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-copy"><Identity person={comment.author_detail} /><time className="text-[10px] font-normal text-muted">{stamp(comment.created_at)}</time></div><p className="mt-2 whitespace-pre-wrap rounded-ds-md bg-canvas p-4 text-[13px] leading-6 text-copy">{comment.body}</p></li>)}</ol> : <div className="rounded-ds-md border border-dashed border-line p-6 text-center"><MessageSquare className="mx-auto mb-2 h-5 w-5 text-muted" /><p className="text-xs text-muted">No updates yet. Start the conversation.</p></div>}
-      <form className="mt-5 space-y-3" onSubmit={async (event) => { event.preventDefault(); if (await run(() => workApi.createComment(itemId, { body: body.trim() }))) setBody(''); }}><Field label="Write an update"><Textarea rows={3} required maxLength={10000} value={body} onChange={(event) => setBody(event.target.value)} placeholder="Share progress or ask a question…" /></Field><div className="flex justify-end"><Button type="submit" disabled={busy || !body.trim()}>Post update</Button></div></form>
-    </Section>}
+    <div hidden={tab !== 'updates'}><WorkDiscussion itemId={itemId} comments={comments} users={users} busy={busy} run={run} /></div>
     {tab === 'activity' && <Section title="Activity" description="Recorded changes and review decisions.">
       {activity.length ? <ol className="space-y-5 border-l border-line pl-5">{activity.map((entry) => <li key={entry.id} className="relative"><span className="absolute -left-[25px] top-1 h-2 w-2 rounded-full bg-brand" /><p className="text-xs font-bold text-copy">{activityLabels[entry.event] || entry.event}</p><p className="mt-1 text-[11px] text-muted">{entry.actor_detail.display_name} · {stamp(entry.created_at)}</p>{entry.details.note && <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-copy">{entry.details.note}</p>}{(entry.details.title || entry.details.label || entry.details.request) && <p className="mt-1 text-xs text-copy">{entry.details.title || entry.details.label || entry.details.request}</p>}{'after' in entry.details && !['brief_changed', 'title_changed'].includes(entry.event) && <p className="mt-1 text-xs text-copy">{entry.details.before || 'Unassigned'} → {entry.details.after || 'Unassigned'}</p>}</li>)}</ol> : <p className="text-xs text-muted">No recorded activity yet. Earlier work is preserved; history starts with this update.</p>}
     </Section>}
