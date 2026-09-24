@@ -71,6 +71,42 @@ class AwarenessTests(TestCase):
         self.assertEqual(self.client.post(url+'review/', {'decision':'request_changes','note':'Fix copy'}).status_code, 200)
         self.assertTrue(Notification.objects.filter(event='changes_requested', recipient=self.admin).exists())
 
+    def test_admin_assigns_and_mentions_standard_user_visible_in_my_work_and_notifications(self):
+        User = get_user_model()
+        demo = User.objects.create_user(email='demo@collings.com.au', is_staff=True)
+        staff = User.objects.create_user(email='staff@example.com')
+        self.client.force_authenticate(demo)
+        directory = self.client.get('/api/work-users/').data
+        self.assertEqual(next(user['id'] for user in directory if user['email'] == staff.email), staff.pk)
+
+        item_url = f'/api/work-items/{self.item.pk}/'
+        response = self.client.patch(item_url, {'owner': staff.pk}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.owner_id, staff.pk)
+        comment = self.client.post(item_url + 'comments/', {
+            'body': '@staff@example.com Please review this.', 'mentions': [staff.pk],
+        }, format='json')
+        self.assertEqual(comment.status_code, 201)
+        self.assertEqual(set(Notification.objects.filter(recipient=staff).values_list('event', flat=True)),
+                         {'assigned', 'mentioned'})
+        self.assertFalse(Notification.objects.filter(recipient=demo).exists())
+
+        self.client.force_authenticate(staff)
+        self.assertEqual(self.client.get(item_url).status_code, 200)
+        mine = self.client.get('/api/work-items/?relevance=mine')
+        self.assertEqual(mine.status_code, 200)
+        self.assertIn(self.item.pk, [item['id'] for item in mine.data])
+        inbox = self.client.get('/api/notifications/')
+        self.assertEqual(inbox.status_code, 200)
+        self.assertEqual(inbox.data['unread_count'], 2)
+        self.assertEqual({entry['event'] for entry in inbox.data['items']}, {'assigned', 'mentioned'})
+        self.assertEqual({entry['target']['id'] for entry in inbox.data['items']}, {self.item.pk})
+
+        self.client.force_authenticate(self.other)
+        self.assertNotIn(self.item.pk, [item['id'] for item in self.client.get('/api/work-items/?relevance=mine').data])
+        self.assertEqual(self.client.get('/api/notifications/').data['unread_count'], 0)
+
     def test_mentions_replies_edits_and_inaccessible_recipients(self):
         url = f'/api/work-items/{self.item.pk}/comments/'
         self.client.force_authenticate(self.owner)
