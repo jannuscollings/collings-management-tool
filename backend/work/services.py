@@ -24,3 +24,5 @@ def record_changes(item, actor, before):
                     return dict(item.Status.choices).get(value, value)
                 return str(value)
             record_activity(item, actor, event, before=label(old), after=label(new))
+    from .notifications import assignment_notifications
+    assignment_notifications(item, actor, before)

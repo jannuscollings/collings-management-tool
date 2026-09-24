@@ -18,7 +18,7 @@ export default function LoginPage() {
     const res = await dispatch(login({ email, password }));
     if (login.fulfilled.match(res)) {
       toast.success("Welcome back");
-      navigate("/");
+      navigate("/home");
     } else {
       toast.error(res.payload || "Login failed");
     }

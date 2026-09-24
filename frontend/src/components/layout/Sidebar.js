@@ -5,11 +5,13 @@ import { cn } from "../../lib/cn";
 import { useSelector } from "react-redux";
 import { DrawerLink, useWorkItemContext } from "../work/WorkItemDrawer";
 import AccountMenu from "./AccountMenu";
+import NotificationLink from "./NotificationLink";
 
 const groups = [
   {
     label: "Work",
     items: [
+      { to: "/home", label: "Home", icon: Inbox },
       { to: "/my-work", label: "My Work", icon: Briefcase },
       { to: "/requests", label: "Requests", icon: Inbox },
     ],
@@ -24,11 +26,11 @@ const navItemClass = ({ isActive }) =>
 
 export default function Sidebar() {
   const user = useSelector((state) => state.auth.user);
-  const { workspaces } = useWorkItemContext();
+  const { workspaces, workspaceLoadError, retryWorkspaces } = useWorkItemContext();
 
   return (
     <aside className="sticky top-0 hidden h-screen flex-col overflow-y-auto border-r border-line bg-surface px-4 py-[18px] shell:flex">
-      <NavLink to="/requests" className="flex items-center gap-3 border-b border-line/70 px-2.5 pb-[18px]">
+      <NavLink to="/home" className="flex items-center gap-3 border-b border-line/70 px-2.5 pb-[18px]">
         <span className="grid h-[34px] w-[34px] place-items-center rounded-full bg-brand text-sm font-extrabold text-white shadow-[0_4px_13px_rgba(45,200,219,0.26)]">C</span>
         <span className="text-xl font-medium tracking-[0.2em] text-copy">COLLINGS</span>
       </NavLink>
@@ -68,17 +70,19 @@ export default function Sidebar() {
                 <span className="truncate">{workspace.name}</span>
               </NavLink>
             ))}
+            {workspaceLoadError && <button type="button" onClick={retryWorkspaces} className="px-3 py-2 text-left text-xs font-semibold text-brand-strong">Reload workspaces</button>}
           </div>
         </div>
         <div className="mb-3">
           <p className="px-2.5 pb-1.5 pt-2 text-[9px] font-extrabold uppercase tracking-[0.14em] text-muted">Demo</p>
-          <NavLink to="/" end className={navItemClass}>
+          <NavLink to="/demo" end className={navItemClass}>
             <Ticket className="h-4 w-4" aria-hidden="true" /> Tickets
           </NavLink>
         </div>
       </nav>
 
       <div className="border-t border-line pt-4">
+        <NotificationLink />
         <AccountMenu />
       </div>
     </aside>

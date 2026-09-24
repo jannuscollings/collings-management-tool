@@ -147,3 +147,20 @@ class WorkLink(models.Model):
 
     class Meta:
         ordering = ("created_at", "pk")
+
+
+class Notification(models.Model):
+    recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="work_notifications")
+    event = models.CharField(max_length=40)
+    work_item = models.ForeignKey(WorkItem, null=True, blank=True, on_delete=models.CASCADE)
+    work_request = models.ForeignKey("intake.WorkRequest", null=True, blank=True, on_delete=models.CASCADE)
+    read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at", "-pk")
+        indexes = [models.Index(fields=("recipient", "read_at", "-created_at"), name="notification_inbox_idx")]
+        constraints = [models.CheckConstraint(
+            check=(models.Q(work_item__isnull=False, work_request__isnull=True) |
+                       models.Q(work_item__isnull=True, work_request__isnull=False)),
+            name="notification_one_target")]

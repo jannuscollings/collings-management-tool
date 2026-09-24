@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
 from .access import is_admin, visible_items, can_edit
 from .services import record_activity, record_changes
+from .notifications import notify, assignment_notifications, comment_notifications
 from .models import SubWork, WorkComment
 from .serializers import SubWorkSerializer, WorkCommentSerializer, WorkActivitySerializer, WorkLinkSerializer
 from rest_framework import mixins, viewsets
@@ -181,6 +182,7 @@ class WorkItemViewSet(
             raise PermissionDenied("Only administrators can create work items.")
         item = serializer.save(created_by=self.request.user)
         record_activity(item, self.request.user, "created")
+        assignment_notifications(item, self.request.user)
 
     @transaction.atomic
     def update(self, request, *args, **kwargs):
@@ -211,6 +213,7 @@ class WorkItemViewSet(
             serializer = WorkCommentSerializer(data=request.data, context=context)
             serializer.is_valid(raise_exception=True)
             serializer.save(work_item=item, author=request.user)
+            comment_notifications(serializer.instance, request.user, reply=True)
             record_activity(item, request.user, "reply_added" if serializer.instance.parent_id else "comment_added", comment_id=serializer.instance.pk)
             return Response(serializer.data, status=201)
         return Response(WorkCommentSerializer(item.comments.select_related("author").prefetch_related('mentions'), many=True, context=context).data)
@@ -240,6 +243,7 @@ class WorkItemViewSet(
             comment.edited_at = timezone.now()
             comment.save(update_fields=('edited_at',))
             record_activity(item, request.user, 'comment_edited', comment_id=comment.pk)
+            comment_notifications(comment, request.user, previous_mentions=before[1])
         return Response(serializer.data)
 
     @action(detail=True, methods=["get"])
@@ -257,6 +261,7 @@ class WorkItemViewSet(
             serializer.is_valid(raise_exception=True)
             sub = serializer.save(work_item=item, created_by=request.user)
             record_activity(item, request.user, "sub_work_created", title=sub.title)
+            notify(request.user, sub.assignee_id, "sub_work_assigned", item=item)
             return Response(serializer.data, status=201)
         return Response(SubWorkSerializer(item.sub_work.select_related("assignee"), many=True).data)
 
@@ -273,6 +278,8 @@ class WorkItemViewSet(
         serializer.is_valid(raise_exception=True)
         serializer.save()
         after = (sub.title, sub.assignee_id, sub.completed)
+        if before[1] != sub.assignee_id:
+            notify(request.user, sub.assignee_id, "sub_work_assigned", item=item)
         if before != after:
             event = ("sub_work_completed" if sub.completed else "sub_work_reopened") if before[2] != after[2] else "sub_work_updated"
             record_activity(item, request.user, event, title=sub.title)
@@ -322,6 +329,7 @@ class WorkItemViewSet(
         item.status = "done" if decision == "approve" else "in_progress"
         item.save(update_fields=("status", "updated_at"))
         record_activity(item, request.user, "approved" if decision == "approve" else "changes_requested", note=note.strip())
+        notify(request.user, item.owner_id, "approved" if decision == "approve" else "changes_requested", item=item)
         return Response(self.get_serializer(item).data)
 
 

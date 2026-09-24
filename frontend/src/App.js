@@ -9,6 +9,7 @@ import RequestsPage from "./pages/RequestsPage";
 import NewRequestPage from "./pages/NewRequestPage";
 import RequestDetailPage from "./pages/RequestDetailPage";
 import MyWorkPage from "./pages/MyWorkPage";
+import HomePage from "./pages/HomePage";
 import AppShell from "./components/layout/AppShell";
 
 export default function App() {
@@ -17,7 +18,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route
-          path="/"
+          path="/demo"
           element={
             <ProtectedRoute>
               <TicketsPage />
@@ -31,6 +32,8 @@ export default function App() {
             </ProtectedRoute>
           }
         >
+          <Route path="/" element={<Navigate to="/home" replace />} />
+          <Route path="/home" element={<HomePage />} />
           <Route path="/my-work" element={<MyWorkPage />} />
           <Route path="/requests" element={<RequestsPage />} />
           <Route path="/requests/new" element={<NewRequestPage />} />

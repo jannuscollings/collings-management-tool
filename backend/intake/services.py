@@ -4,6 +4,7 @@ from django.utils import timezone
 
 from work.models import WorkGroup, WorkItem
 from work.services import record_activity
+from work.notifications import notify, assignment_notifications
 
 from .models import WorkRequest
 
@@ -93,4 +94,6 @@ def accept_work_request(request_id, actor):
             "updated_at",
         )
     )
+    assignment_notifications(work_item, actor)
+    notify(actor, work_request.submitted_by_id, "request_accepted", work_request=work_request)
     return work_request, True

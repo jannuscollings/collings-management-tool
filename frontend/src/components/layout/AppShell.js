@@ -4,6 +4,7 @@ import { Link, NavLink, Outlet } from "react-router-dom";
 import { cn } from "../../lib/cn";
 import AccountMenu from "./AccountMenu";
 import Sidebar from "./Sidebar";
+import NotificationLink from "./NotificationLink";
 import WorkItemDrawer, { DrawerLink, useWorkItemContext } from "../work/WorkItemDrawer";
 
 const mobileLinkClass = ({ isActive }) =>
@@ -14,22 +15,24 @@ const mobileLinkClass = ({ isActive }) =>
 
 function MobileHeader() {
   const user = useSelector((state) => state.auth.user);
-  const { workspaces } = useWorkItemContext();
+  const { workspaces, workspaceLoadError, retryWorkspaces } = useWorkItemContext();
 
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-surface/95 backdrop-blur shell:hidden">
       <div className="flex min-h-14 items-center justify-between gap-3 px-4">
-        <Link to="/requests" className="font-bold tracking-[0.16em] text-copy">COLLINGS</Link>
-        <AccountMenu compact />
+        <Link to="/home" className="font-bold tracking-[0.16em] text-copy">COLLINGS</Link>
+        <div className="flex items-center gap-2"><NotificationLink /><AccountMenu compact /></div>
       </div>
       <nav className="flex gap-1 overflow-x-auto px-2 pb-2" aria-label="Mobile navigation">
+        <NavLink to="/home" className={mobileLinkClass}>Home</NavLink>
         <NavLink to="/my-work" className={mobileLinkClass}>My Work</NavLink>
         <NavLink to="/requests" className={mobileLinkClass}>Requests</NavLink>
         {workspaces.map((workspace) => (
           <NavLink key={workspace.id} to={`/workspaces/${workspace.slug}`} className={mobileLinkClass}>{workspace.name}</NavLink>
         ))}
+        {workspaceLoadError && <button type="button" onClick={retryWorkspaces} className="whitespace-nowrap px-3 py-2 text-xs font-bold text-brand-strong">Reload workspaces</button>}
         {user?.is_staff && <DrawerLink drawer="workspaces" className="whitespace-nowrap rounded-ds-sm px-3 py-2 text-xs font-bold text-copy">Manage workspaces</DrawerLink>}
-        <NavLink to="/" end className={mobileLinkClass}>Demo</NavLink>
+        <NavLink to="/demo" end className={mobileLinkClass}>Demo</NavLink>
       </nav>
     </header>
   );

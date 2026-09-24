@@ -8,6 +8,8 @@ import NewWorkItemForm from "./NewWorkItemForm";
 import WorkItemPanel from "./WorkItemPanel";
 import WorkspaceManagerPanel from "./WorkspaceManagerPanel";
 import { workApi } from "../../api/work";
+import { awarenessApi } from "../../api/awareness";
+import NotificationsPanel from "./NotificationsPanel";
 
 const WorkItemContext = createContext({ revision: 0, requestRevision: 0, workspaceRevision: 0, workspaces: [] });
 export const useWorkItemContext = () => useContext(WorkItemContext);
@@ -53,16 +55,44 @@ export default function WorkItemDrawer({ children }) {
   const [requestRevision, setRequestRevision] = useState(0);
   const [workspaceRevision, setWorkspaceRevision] = useState(0);
   const [workspaces, setWorkspaces] = useState([]);
+  const [workspaceLoadError, setWorkspaceLoadError] = useState(false);
+  const [workspaceRetry, setWorkspaceRetry] = useState(0);
+  const [inbox, setInbox] = useState({ items: [], unread_count: 0, next_before: null });
+  const [inboxLoading, setInboxLoading] = useState(false);
+  const [inboxError, setInboxError] = useState(false);
+  const [inboxRevision, setInboxRevision] = useState(0);
+  const refreshInbox = useCallback(() => setInboxRevision(x => x + 1), []);
+  const location = useLocation();
+  useEffect(() => {
+    let active = true;
+    setInboxLoading(true); setInboxError(false);
+    awarenessApi.notifications().then(({ data }) => { if (active) setInbox(data); })
+      .catch(() => { if (active) { setInboxError(true); setInbox({ items: [], unread_count: 0, next_before: null }); } })
+      .finally(() => { if (active) setInboxLoading(false); });
+    return () => { active = false; };
+  }, [inboxRevision, revision, requestRevision, workspaceRevision, location.pathname, drawer]);
+  useEffect(() => { window.addEventListener('focus', refreshInbox); return () => window.removeEventListener('focus', refreshInbox); }, [refreshInbox]);
   const dirty = useRef(false);
   const busy = useRef(false);
   const opener = useRef(null);
   useEffect(() => {
     let active = true;
-    workApi.listWorkspaces()
-      .then(({ data }) => { if (active) setWorkspaces(data); })
-      .catch(() => { if (active) setWorkspaces([]); });
-    return () => { active = false; };
-  }, [workspaceRevision]);
+    let retryTimer;
+    setWorkspaceLoadError(false);
+    const load = (attempt = 0) => {
+      workApi.listWorkspaces()
+        .then(({ data }) => {
+          if (active) setWorkspaces(data);
+        })
+        .catch(() => {
+          if (!active) return;
+          if (attempt === 0) retryTimer = window.setTimeout(() => load(1), 1000);
+          else setWorkspaceLoadError(true);
+        });
+    };
+    load();
+    return () => { active = false; window.clearTimeout(retryTimer); };
+  }, [workspaceRevision, workspaceRetry, location.pathname]);
   useEffect(() => { dirty.current = false; busy.current = false; }, [itemId, requestId, drawer]);
   const close = () => {
     if (busy.current) return;
@@ -102,6 +132,7 @@ export default function WorkItemDrawer({ children }) {
   const titles = {
     "new-work-item": ["New work item", "Create delivery work without leaving the workspace"],
     "new-request": ["Request internal work", "Submit a Creative & Design request for triage"],
+    notifications: ["Notifications", "Updates that need your attention"],
     workspaces: ["Manage workspaces", "Create, rename, order and archive workspaces"],
   };
   const [title, description] = itemId
@@ -110,7 +141,7 @@ export default function WorkItemDrawer({ children }) {
       ? ["Request", "Submitted details, triage and delivery outcome"]
     : titles[drawer] || ["Panel", ""];
   return (
-    <WorkItemContext.Provider value={{ revision, requestRevision, workspaceRevision, workspaces }}>
+    <WorkItemContext.Provider value={{ revision, requestRevision, workspaceRevision, workspaces, workspaceLoadError, retryWorkspaces: () => setWorkspaceRetry((value) => value + 1), unreadCount: inbox.unread_count }}>
       {children}
       <Dialog.Root open={Boolean(itemId || requestId || drawer)} onOpenChange={(open) => { if (!open) close(); }}>
         <Dialog.Portal>
@@ -145,6 +176,9 @@ export default function WorkItemDrawer({ children }) {
                   onDirty={setDirty}
                   onBusy={setBusy}
                 />
+              )}
+              {!itemId && !requestId && drawer === "notifications" && (
+                <NotificationsPanel inbox={inbox} loading={inboxLoading} error={inboxError} refresh={refreshInbox} />
               )}
               {!itemId && !requestId && drawer === "workspaces" && (
                 <WorkspaceManagerPanel

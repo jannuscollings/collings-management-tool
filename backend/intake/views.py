@@ -6,6 +6,7 @@ from rest_framework.response import Response
 
 from rest_framework.exceptions import PermissionDenied
 from work.access import is_admin
+from work.notifications import notify
 
 from .models import WorkRequest
 from .serializers import (
@@ -135,4 +136,5 @@ class WorkRequestViewSet(
             )
         work_request.status = WorkRequest.Status.REJECTED
         work_request.save(update_fields=("status", "updated_at"))
+        notify(request.user, work_request.submitted_by_id, "request_rejected", work_request=work_request)
         return Response(WorkRequestSerializer(work_request, context=self.get_serializer_context()).data)
