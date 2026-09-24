@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
+import { WorkItemLink, useWorkItemContext } from "../components/work/WorkItemDrawer";
 import toast from "react-hot-toast";
 import { Search, X } from "lucide-react";
 
@@ -33,6 +34,7 @@ const STATUS_VARIANTS = {
 };
 
 export default function MyWorkPage() {
+  const { revision } = useWorkItemContext();
   const user = useSelector((state) => state.auth.user);
   const [searchParams, setSearchParams] = useSearchParams();
   const [workItems, setWorkItems] = useState([]);
@@ -70,7 +72,7 @@ export default function MyWorkPage() {
     return () => {
       active = false;
     };
-  }, [querySearch, statusFilter, priorityFilter]);
+  }, [querySearch, statusFilter, priorityFilter, revision]);
 
   useEffect(() => {
     setSearchInput(querySearch);
@@ -189,14 +191,13 @@ export default function MyWorkPage() {
               ) : workItems.map((item) => {
                 const isOwner = item.owner === user?.id;
                 const isReviewer = item.reviewer === user?.id;
-                const itemPath = `/workspaces/${item.workspace_slug}/items/${item.id}`;
                 return (
                   <tr key={item.id} className="text-[11.5px] text-copy transition-colors hover:bg-brand-soft/35">
                     <td className="px-[13px] py-3 font-mono text-[10.5px] font-semibold text-muted">
-                      <Link to={itemPath} className="hover:text-brand-strong">{item.reference}</Link>
+                      <WorkItemLink item={item} className="hover:text-brand-strong">{item.reference}</WorkItemLink>
                     </td>
                     <td className="px-[13px] py-3">
-                      <Link to={itemPath} className="font-bold text-ink hover:text-brand-strong">{item.title}</Link>
+                      <WorkItemLink item={item} className="font-bold text-ink hover:text-brand-strong">{item.title}</WorkItemLink>
                     </td>
                     <td className="px-[13px] py-3">
                       <span className="font-semibold text-copy">{item.workspace_name}</span>

@@ -24,3 +24,31 @@ class WorkItemAdmin(admin.ModelAdmin):
     search_fields = ("reference", "title", "brief")
     readonly_fields = ("reference", "created_at", "updated_at")
 
+    # WorkItem mutations go through the application so review rules and actor history apply.
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+# Discussion and audit records are inspectable, but cannot be rewritten in admin.
+from .models import SubWork, WorkComment, WorkActivity, WorkLink
+
+
+class OperationalRecordAdmin(admin.ModelAdmin):
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+for model in (SubWork, WorkComment, WorkActivity, WorkLink):
+    admin.site.register(model, OperationalRecordAdmin)

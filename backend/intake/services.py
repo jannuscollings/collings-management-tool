@@ -3,6 +3,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from work.models import WorkGroup, WorkItem
+from work.services import record_activity
 
 from .models import WorkRequest
 
@@ -16,7 +17,7 @@ class RequestAcceptanceError(Exception):
 @transaction.atomic
 def accept_work_request(request_id, actor):
     work_request = (
-        WorkRequest.objects.select_for_update()
+        WorkRequest.objects.select_for_update(of=("self",))
         .select_related("resulting_work_item")
         .get(pk=request_id)
     )
@@ -78,6 +79,7 @@ def accept_work_request(request_id, actor):
         created_by=actor,
     )
 
+    record_activity(work_item, actor, "created", request=work_request.reference)
     work_request.resulting_work_item = work_item
     work_request.status = WorkRequest.Status.ACCEPTED
     work_request.accepted_by = actor

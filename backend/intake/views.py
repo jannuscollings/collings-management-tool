@@ -4,6 +4,9 @@ from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from rest_framework.exceptions import PermissionDenied
+from work.access import is_admin
+
 from .models import WorkRequest
 from .serializers import (
     WorkRequestSerializer,
@@ -32,8 +35,15 @@ class WorkRequestViewSet(
         "accepted_by",
     )
 
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if self.action in ("triage", "accept", "reject") and not is_admin(request.user):
+            raise PermissionDenied("Only administrators can triage requests.")
+
     def get_queryset(self):
         queryset = super().get_queryset()
+        if not is_admin(self.request.user):
+            queryset = queryset.filter(submitted_by=self.request.user)
         request_status = self.request.query_params.get("status")
         if request_status in WorkRequest.Status.values:
             queryset = queryset.filter(status=request_status)
@@ -50,7 +60,7 @@ class WorkRequestViewSet(
         serializer.save(submitted_by=self.request.user)
 
     def get_locked_object(self):
-        queryset = self.filter_queryset(self.get_queryset().select_for_update())
+        queryset = self.filter_queryset(self.get_queryset().select_for_update(of=("self",)))
         work_request = get_object_or_404(queryset, pk=self.kwargs["pk"])
         self.check_object_permissions(self.request, work_request)
         return work_request

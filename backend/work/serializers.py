@@ -1,7 +1,10 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
+from django.db.models import Prefetch
 
-from .models import WorkGroup, WorkItem, Workspace
+from .models import WorkGroup, WorkItem, Workspace, SubWork, WorkComment, WorkActivity, WorkLink
+from .access import is_admin, visible_items, can_edit, allowed_statuses
 
 User = get_user_model()
 
@@ -18,6 +21,14 @@ class WorkUserSerializer(serializers.ModelSerializer):
 
 
 class WorkItemSerializer(serializers.ModelSerializer):
+    permissions = serializers.SerializerMethodField()
+
+    def get_permissions(self, item):
+        user = self.context["request"].user
+        return {"manage": is_admin(user), "edit": can_edit(item, user),
+                "review": item.status == "review" and item.reviewer_id == user.pk,
+                "statuses": allowed_statuses(item, user)}
+
     owner_detail = WorkUserSerializer(source="owner", read_only=True)
     reviewer_detail = WorkUserSerializer(source="reviewer", read_only=True)
     created_by_detail = WorkUserSerializer(source="created_by", read_only=True)
@@ -34,6 +45,7 @@ class WorkItemSerializer(serializers.ModelSerializer):
             "group_name",
             "workspace_slug",
             "workspace_name",
+            "permissions",
             "title",
             "brief",
             "status",
@@ -53,6 +65,7 @@ class WorkItemSerializer(serializers.ModelSerializer):
             "group_name",
             "workspace_slug",
             "workspace_name",
+            "permissions",
             "owner_detail",
             "reviewer_detail",
             "created_by_detail",
@@ -61,6 +74,25 @@ class WorkItemSerializer(serializers.ModelSerializer):
         )
 
     def validate(self, attrs):
+        user = self.context["request"].user
+        item = self.instance
+        if not is_admin(user):
+            if not item or not can_edit(item, user):
+                raise PermissionDenied("Only an administrator or the owner can edit this work item.")
+            forbidden = set(attrs) - {"title", "brief", "status"}
+            if forbidden:
+                raise PermissionDenied("Only administrators can change assignments and delivery properties.")
+        group = attrs.get("group")
+        if group and (group.archived or group.workspace.archived):
+            raise serializers.ValidationError({"group": "Select an active group."})
+        next_status = attrs.get("status", item.status if item else "new")
+        reviewer = attrs.get("reviewer", item.reviewer if item else None)
+        if item and item.status == "review" and next_status != "review":
+            raise serializers.ValidationError({"status": "Use Approve or Request changes to leave Review."})
+        if (not item or next_status != item.status) and next_status == "done" and reviewer:
+            raise serializers.ValidationError({"status": "Assigned review must be approved by the reviewer."})
+        if next_status == "review" and (not reviewer or not reviewer.is_active):
+            raise serializers.ValidationError({"reviewer": "Assign an active reviewer before submitting for review."})
         for field_name in ("owner", "reviewer"):
             user = attrs.get(field_name)
             if user is not None and not user.is_active:
@@ -69,7 +101,11 @@ class WorkItemSerializer(serializers.ModelSerializer):
 
 
 class WorkGroupSerializer(serializers.ModelSerializer):
-    work_items = WorkItemSerializer(many=True, read_only=True)
+    work_items = serializers.SerializerMethodField()
+
+    def get_work_items(self, group):
+        items = group.visible_work_items
+        return WorkItemSerializer(items, many=True, context=self.context).data
 
     class Meta:
         model = WorkGroup
@@ -84,9 +120,56 @@ class WorkspaceSerializer(serializers.ModelSerializer):
         fields = ("id", "name", "slug", "display_order", "groups")
 
     def get_groups(self, workspace):
+        items = visible_items(WorkItem.objects.select_related(
+            "group__workspace", "owner", "reviewer", "created_by"
+        ), self.context["request"].user)
         groups = workspace.groups.filter(archived=False).prefetch_related(
-            "work_items__owner",
-            "work_items__reviewer",
-            "work_items__created_by",
+            Prefetch("work_items", queryset=items, to_attr="visible_work_items")
         )
         return WorkGroupSerializer(groups, many=True, context=self.context).data
+
+
+class SubWorkSerializer(serializers.ModelSerializer):
+    assignee_detail = WorkUserSerializer(source="assignee", read_only=True)
+
+    class Meta:
+        model = SubWork
+        fields = ("id", "title", "assignee", "assignee_detail", "completed", "created_at", "updated_at")
+        read_only_fields = ("id", "created_at", "updated_at")
+
+    def validate_assignee(self, user):
+        if user and not user.is_active:
+            raise serializers.ValidationError("Select an active user.")
+        return user
+
+
+class WorkCommentSerializer(serializers.ModelSerializer):
+    author_detail = WorkUserSerializer(source="author", read_only=True)
+    body = serializers.CharField(max_length=10000, allow_blank=False)
+
+    class Meta:
+        model = WorkComment
+        fields = ("id", "author_detail", "body", "created_at")
+        read_only_fields = ("id", "created_at")
+
+
+class WorkActivitySerializer(serializers.ModelSerializer):
+    actor_detail = WorkUserSerializer(source="actor", read_only=True)
+
+    class Meta:
+        model = WorkActivity
+        fields = ("id", "actor_detail", "event", "details", "created_at")
+        read_only_fields = fields
+
+
+class WorkLinkSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WorkLink
+        fields = ("id", "label", "url", "created_at")
+        read_only_fields = ("id", "created_at")
+
+    def validate_url(self, value):
+        from urllib.parse import urlsplit
+        if urlsplit(value).scheme not in ("http", "https"):
+            raise serializers.ValidationError("Use an HTTP or HTTPS URL.")
+        return value

@@ -98,3 +98,48 @@ class WorkItem(models.Model):
     def __str__(self):
         return f"{self.reference or 'New work item'} {self.title}"
 
+
+
+class SubWork(models.Model):
+    work_item = models.ForeignKey(WorkItem, on_delete=models.CASCADE, related_name="sub_work")
+    title = models.CharField(max_length=200)
+    assignee = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    completed = models.BooleanField(default=False)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="created_sub_work")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("created_at", "pk")
+
+
+class WorkComment(models.Model):
+    work_item = models.ForeignKey(WorkItem, on_delete=models.CASCADE, related_name="comments")
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    body = models.TextField(max_length=10000)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("created_at", "pk")
+
+
+class WorkActivity(models.Model):
+    work_item = models.ForeignKey(WorkItem, on_delete=models.CASCADE, related_name="activity")
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    event = models.CharField(max_length=60)
+    details = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at", "-pk")
+
+
+class WorkLink(models.Model):
+    work_item = models.ForeignKey(WorkItem, on_delete=models.CASCADE, related_name="links")
+    label = models.CharField(max_length=160)
+    url = models.URLField(max_length=2000)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("created_at", "pk")

@@ -6,6 +6,7 @@ import { useTheme } from "../../contexts/ThemeContext";
 import { cn } from "../../lib/cn";
 import { logout } from "../../store/slices/authSlice";
 import Sidebar from "./Sidebar";
+import WorkItemDrawer from "../work/WorkItemDrawer";
 
 const mobileLinkClass = ({ isActive }) =>
   cn(
@@ -18,6 +19,7 @@ export default function AppShell() {
   const { theme, toggle } = useTheme();
 
   return (
+    <WorkItemDrawer>
     <div className="min-h-screen bg-canvas font-product text-ink shell:grid shell:grid-cols-[250px_minmax(0,1fr)]">
       <Sidebar />
       <div className="min-w-0">
@@ -45,5 +47,6 @@ export default function AppShell() {
         </main>
       </div>
     </div>
+    </WorkItemDrawer>
   );
 }

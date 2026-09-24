@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useSelector } from "react-redux";
+import { WorkItemLink, useWorkItemContext } from "../components/work/WorkItemDrawer";
 import toast from "react-hot-toast";
-import { Plus, Search, X } from "lucide-react";
+import { LayoutGrid, List, Plus, Search, X } from "lucide-react";
 
 import { WORK_PRIORITY_OPTIONS, WORK_STATUS_OPTIONS, workApi } from "../api/work";
 import PageContainer from "../components/layout/PageContainer";
+import WorkspaceKanban from "../components/work/WorkspaceKanban";
 import Badge from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Field, Input, Select, Textarea } from "../components/ui/Field";
@@ -42,6 +45,8 @@ const emptyForm = {
 };
 
 export default function WorkspacePage() {
+  const { revision } = useWorkItemContext();
+  const isAdmin = useSelector((state) => state.auth.user?.is_staff);
   const { workspaceSlug } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -52,13 +57,20 @@ export default function WorkspacePage() {
   const [itemsLoading, setItemsLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savingItemIds, setSavingItemIds] = useState(() => new Set());
+  const pendingMoves = useRef(new Set());
+  const fetchSequence = useRef(0);
+  const [moveRevision, setMoveRevision] = useState(0);
   const [form, setForm] = useState(emptyForm);
 
+  const viewMode = searchParams.get("view") === "kanban" ? "kanban" : "table";
   const querySearch = searchParams.get("q") || "";
   const statusFilter = searchParams.get("status") || "";
   const priorityFilter = searchParams.get("priority") || "";
   const ownerFilter = searchParams.get("owner") || "";
   const [searchInput, setSearchInput] = useState(querySearch);
+  const currentQuery = useRef("");
+  currentQuery.current = JSON.stringify([workspaceSlug, querySearch, statusFilter, priorityFilter, ownerFilter]);
   const hasActiveFilters = Boolean(querySearch || statusFilter || priorityFilter || ownerFilter);
 
   useEffect(() => {
@@ -88,6 +100,7 @@ export default function WorkspacePage() {
   useEffect(() => {
     let active = true;
     setItemsLoading(true);
+    const sequence = ++fetchSequence.current;
     workApi.listWorkItems({
       workspace: workspaceSlug,
       ...(querySearch && { q: querySearch }),
@@ -96,7 +109,7 @@ export default function WorkspacePage() {
       ...(ownerFilter && { owner: ownerFilter }),
     })
       .then(({ data }) => {
-        if (active) setWorkItems(data);
+        if (active && sequence === fetchSequence.current) setWorkItems(data);
       })
       .catch(() => {
         if (active) toast.error("Couldn't filter the work items");
@@ -107,7 +120,7 @@ export default function WorkspacePage() {
     return () => {
       active = false;
     };
-  }, [workspaceSlug, querySearch, statusFilter, priorityFilter, ownerFilter]);
+  }, [workspaceSlug, querySearch, statusFilter, priorityFilter, ownerFilter, revision, moveRevision]);
 
   useEffect(() => {
     setSearchInput(querySearch);
@@ -142,7 +155,51 @@ export default function WorkspacePage() {
 
   const clearFilters = () => {
     setSearchInput("");
-    setSearchParams({});
+    setSearchParams(viewMode === "kanban" ? { view: "kanban" } : {});
+  };
+
+  const changeView = (nextView) => {
+    const next = new URLSearchParams(searchParams);
+    if (nextView === "kanban") next.set("view", "kanban");
+    else next.delete("view");
+    setSearchParams(next);
+  };
+
+  const moveItem = async (item, nextStatus) => {
+    if (itemsLoading || item.status === nextStatus || pendingMoves.current.has(item.id) || !item.permissions?.statuses.includes(nextStatus)) return;
+    const previousStatus = item.status;
+    const queryAtStart = currentQuery.current;
+    pendingMoves.current.add(item.id);
+    fetchSequence.current += 1;
+    setSavingItemIds((current) => new Set(current).add(item.id));
+    setWorkItems((current) => current.map((candidate) => (
+      candidate.id === item.id ? { ...candidate, status: nextStatus } : candidate
+    )));
+
+    try {
+      const { data } = await workApi.updateItem(item.id, { status: nextStatus });
+      setWorkItems((current) => {
+        if (currentQuery.current !== queryAtStart) return current;
+        if (statusFilter && data.status !== statusFilter) {
+          return current.filter((candidate) => candidate.id !== item.id);
+        }
+        return current.map((candidate) => candidate.id === item.id ? data : candidate);
+      });
+      toast.success(`${item.reference} moved to ${STATUS_LABELS[data.status]}`);
+    } catch (error) {
+      setWorkItems((current) => currentQuery.current !== queryAtStart ? current : current.map((candidate) => (
+        candidate.id === item.id ? { ...candidate, status: previousStatus } : candidate
+      )));
+      toast.error(error.response?.data?.status?.[0] || error.response?.data?.detail || `Couldn't move ${item.reference}`);
+    } finally {
+      pendingMoves.current.delete(item.id);
+      setMoveRevision((value) => value + 1);
+      setSavingItemIds((current) => {
+        const next = new Set(current);
+        next.delete(item.id);
+        return next;
+      });
+    }
   };
 
   const updateForm = (field) => (event) => {
@@ -185,17 +242,41 @@ export default function WorkspacePage() {
         title={workspace.name}
         description="Internal work items grouped by delivery stream."
         actions={
-          <Button
-            variant={showCreate ? "secondary" : "primary"}
-            onClick={() => setShowCreate((visible) => !visible)}
-          >
-            {showCreate ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-            {showCreate ? "Cancel" : "New work item"}
-          </Button>
+          <>
+            <div className="inline-flex rounded-ds-sm border border-line bg-surface p-1" role="group" aria-label="Workspace view">
+              <button
+                type="button"
+                aria-pressed={viewMode === "table"}
+                onClick={() => changeView("table")}
+                className={`inline-flex min-h-[32px] items-center gap-1.5 rounded-ds-xs px-3 text-[11.5px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand/20 ${
+                  viewMode === "table" ? "bg-brand-soft text-brand-strong" : "text-muted hover:bg-canvas hover:text-copy"
+                }`}
+              >
+                <List className="h-3.5 w-3.5" /> Table
+              </button>
+              <button
+                type="button"
+                aria-pressed={viewMode === "kanban"}
+                onClick={() => changeView("kanban")}
+                className={`inline-flex min-h-[32px] items-center gap-1.5 rounded-ds-xs px-3 text-[11.5px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand/20 ${
+                  viewMode === "kanban" ? "bg-brand-soft text-brand-strong" : "text-muted hover:bg-canvas hover:text-copy"
+                }`}
+              >
+                <LayoutGrid className="h-3.5 w-3.5" /> Kanban
+              </button>
+            </div>
+            {isAdmin && <Button
+              variant={showCreate ? "secondary" : "primary"}
+              onClick={() => setShowCreate((visible) => !visible)}
+            >
+              {showCreate ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+              {showCreate ? "Cancel" : "New work item"}
+            </Button>}
+          </>
         }
       />
 
-      {showCreate && (
+      {isAdmin && showCreate && (
         <Panel className="mb-7 p-5 sm:p-6">
           <form onSubmit={createItem} className="grid gap-5 sm:grid-cols-2">
           <Field label="Title">
@@ -283,7 +364,7 @@ export default function WorkspacePage() {
         {itemsLoading && <p className="mt-2 text-[10.5px] text-muted">Updating work items…</p>}
       </Panel>
 
-      <div className={`space-y-5 transition-opacity ${itemsLoading ? "opacity-70" : "opacity-100"}`}>
+      <div className={`${viewMode === "kanban" ? "hidden" : ""} space-y-5 transition-opacity ${itemsLoading ? "opacity-70" : "opacity-100"}`}>
         {filteredGroups.map((group) => (
           <section key={group.id}>
             <Panel className="overflow-hidden">
@@ -310,10 +391,10 @@ export default function WorkspacePage() {
                     ) : group.work_items.map((item) => (
                       <tr key={item.id} className="text-[11.5px] text-copy transition-colors hover:bg-brand-soft/35">
                         <td className="px-[13px] py-3 font-mono text-[10.5px] font-semibold text-muted">
-                          <Link to={`/workspaces/${workspaceSlug}/items/${item.id}`} className="hover:text-brand-strong">{item.reference}</Link>
+                          <WorkItemLink item={item} className="hover:text-brand-strong">{item.reference}</WorkItemLink>
                         </td>
                         <td className="px-[13px] py-3">
-                          <Link to={`/workspaces/${workspaceSlug}/items/${item.id}`} className="font-bold text-ink hover:text-brand-strong">{item.title}</Link>
+                          <WorkItemLink item={item} className="font-bold text-ink hover:text-brand-strong">{item.title}</WorkItemLink>
                         </td>
                         <td className="px-[13px] py-3"><Badge variant={STATUS_VARIANTS[item.status]}>{STATUS_LABELS[item.status]}</Badge></td>
                         <td className="px-[13px] py-3"><Badge variant={PRIORITY_VARIANTS[item.priority]} className="capitalize">{item.priority}</Badge></td>
@@ -329,6 +410,16 @@ export default function WorkspacePage() {
           </section>
         ))}
       </div>
+      {viewMode === "kanban" && (
+        <WorkspaceKanban
+          hasActiveFilters={hasActiveFilters}
+          items={filteredGroups.flatMap((group) => group.work_items)}
+          loading={itemsLoading}
+          onMoveItem={moveItem}
+          savingItemIds={savingItemIds}
+          workspaceSlug={workspaceSlug}
+        />
+      )}
     </PageContainer>
   );
 }

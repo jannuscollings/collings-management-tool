@@ -1,3 +1,4 @@
+import { useSelector } from "react-redux";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
@@ -22,6 +23,7 @@ const STATUS_VARIANTS = {
 const PRIORITY_VARIANTS = { high: "warning", medium: "neutral", low: "neutral" };
 
 export default function RequestDetailPage() {
+  const isAdmin = useSelector((state) => state.auth.user?.is_staff);
   const { requestId } = useParams();
   const [request, setRequest] = useState(null);
   const [groups, setGroups] = useState([]);
@@ -155,7 +157,7 @@ export default function RequestDetailPage() {
         </Panel>
       )}
 
-      {!terminal && (
+      {isAdmin && !terminal && (
         <Panel className="p-5 sm:p-6">
           <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-brand-strong dark:text-brand">Triage</p>
           <h2 className="mt-1 text-lg font-extrabold text-ink">Route into delivery</h2>

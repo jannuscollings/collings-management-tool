@@ -22,6 +22,7 @@ class WorkRequestApiTests(TestCase):
         )
         self.triager = User.objects.create_user(
             email="triager@example.com",
+            is_staff=True,
             password="password123",
         )
         self.owner = User.objects.create_user(

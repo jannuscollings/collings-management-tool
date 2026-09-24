@@ -12,7 +12,7 @@ User = get_user_model()
 @override_settings(SECURE_SSL_REDIRECT=False)
 class WorkApiTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(email="creator@example.com", password="password123")
+        self.user = User.objects.create_user(email="creator@example.com", password="password123", is_staff=True)
         self.assignee = User.objects.create_user(email="owner@example.com", password="password123")
         self.workspace = Workspace.objects.get(slug="creative-design")
         self.group = self.workspace.groups.get(name="Property launch")

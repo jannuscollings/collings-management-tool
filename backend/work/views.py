@@ -1,5 +1,14 @@
 from django.contrib.auth import get_user_model
 from django.db.models import Q
+from django.db import transaction
+from django.shortcuts import get_object_or_404
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.exceptions import PermissionDenied
+from .access import is_admin, visible_items, can_edit
+from .services import record_activity, record_changes
+from .models import SubWork
+from .serializers import SubWorkSerializer, WorkCommentSerializer, WorkActivitySerializer, WorkLinkSerializer
 from rest_framework import mixins, viewsets
 from rest_framework.exceptions import ValidationError
 
@@ -32,7 +41,7 @@ class WorkItemViewSet(
     )
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = visible_items(super().get_queryset(), self.request.user)
         params = self.request.query_params
         relevance = params.get("relevance")
         if relevance:
@@ -79,8 +88,126 @@ class WorkItemViewSet(
 
         return queryset.order_by("-created_at", "-pk")
 
+    @transaction.atomic
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        if not is_admin(self.request.user):
+            raise PermissionDenied("Only administrators can create work items.")
+        item = serializer.save(created_by=self.request.user)
+        record_activity(item, self.request.user, "created")
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        item = self.locked_item()
+        serializer = self.get_serializer(item, data=request.data, partial=kwargs.get("partial", False))
+        serializer.is_valid(raise_exception=True)
+        before = {field: getattr(item, field) for field in
+                  ("title", "brief", "group_id", "status", "priority", "owner_id", "reviewer_id", "due_date")}
+        serializer.save()
+        record_changes(item, request.user, before)
+        return Response(serializer.data)
+
+    def locked_item(self):
+        # Lock only the work item, not nullable joined owner/reviewer rows (PostgreSQL).
+        visible = self.get_object()
+        item = WorkItem.objects.select_for_update().get(pk=visible.pk)
+        # Recheck after acquiring the lock in case assignment changed while waiting.
+        if not visible_items(WorkItem.objects.filter(pk=item.pk), self.request.user).exists():
+            raise PermissionDenied("Your access to this work item has changed.")
+        return item
+
+    @action(detail=True, methods=["get", "post"])
+    @transaction.atomic
+    def comments(self, request, pk=None):
+        item = self.get_object()
+        if request.method == "POST":
+            serializer = WorkCommentSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            serializer.save(work_item=item, author=request.user)
+            record_activity(item, request.user, "comment_added")
+            return Response(serializer.data, status=201)
+        return Response(WorkCommentSerializer(item.comments.select_related("author"), many=True).data)
+
+    @action(detail=True, methods=["get"])
+    def activity(self, request, pk=None):
+        return Response(WorkActivitySerializer(self.get_object().activity.select_related("actor"), many=True).data)
+
+    @action(detail=True, methods=["get", "post"], url_path="sub-work")
+    @transaction.atomic
+    def sub_work(self, request, pk=None):
+        item = self.get_object()
+        if request.method == "POST":
+            if not is_admin(request.user):
+                raise PermissionDenied("Only administrators can create sub-work.")
+            serializer = SubWorkSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            sub = serializer.save(work_item=item, created_by=request.user)
+            record_activity(item, request.user, "sub_work_created", title=sub.title)
+            return Response(serializer.data, status=201)
+        return Response(SubWorkSerializer(item.sub_work.select_related("assignee"), many=True).data)
+
+    @action(detail=True, methods=["patch"], url_path=r"sub-work/(?P<sub_id>[0-9]+)")
+    @transaction.atomic
+    def edit_sub_work(self, request, pk=None, sub_id=None):
+        item = self.get_object()
+        sub = get_object_or_404(SubWork.objects.select_for_update(), work_item=item, pk=sub_id)
+        if not is_admin(request.user):
+            if sub.assignee_id != request.user.pk or set(request.data) - {"completed"}:
+                raise PermissionDenied("You may only complete or reopen your assigned sub-work.")
+        before = (sub.title, sub.assignee_id, sub.completed)
+        serializer = SubWorkSerializer(sub, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        after = (sub.title, sub.assignee_id, sub.completed)
+        if before != after:
+            event = ("sub_work_completed" if sub.completed else "sub_work_reopened") if before[2] != after[2] else "sub_work_updated"
+            record_activity(item, request.user, event, title=sub.title)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["get", "post"])
+    @transaction.atomic
+    def links(self, request, pk=None):
+        item = self.get_object()
+        if request.method == "POST":
+            if not can_edit(item, request.user):
+                raise PermissionDenied("Only the owner or an administrator can add links.")
+            serializer = WorkLinkSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            serializer.save(work_item=item, created_by=request.user)
+            record_activity(item, request.user, "link_added", label=serializer.instance.label)
+            return Response(serializer.data, status=201)
+        return Response(WorkLinkSerializer(item.links.all(), many=True).data)
+
+    @action(detail=True, methods=["delete"], url_path=r"links/(?P<link_id>[0-9]+)")
+    @transaction.atomic
+    def remove_link(self, request, pk=None, link_id=None):
+        item = self.get_object()
+        if not can_edit(item, request.user):
+            raise PermissionDenied("Only the owner or an administrator can remove links.")
+        link = get_object_or_404(item.links, pk=link_id)
+        record_activity(item, request.user, "link_removed", label=link.label)
+        link.delete()
+        return Response(status=204)
+
+    @action(detail=True, methods=["post"])
+    @transaction.atomic
+    def review(self, request, pk=None):
+        item = self.locked_item()
+        if item.reviewer_id != request.user.pk:
+            raise PermissionDenied("Only the assigned reviewer can decide this review.")
+        if item.status != "review":
+            return Response({"detail": "This work item is not awaiting review."}, status=409)
+        decision = request.data.get("decision")
+        if decision not in ("approve", "request_changes"):
+            raise ValidationError({"decision": "Choose approve or request_changes."})
+        note = request.data.get("note", "")
+        if not isinstance(note, str) or len(note) > 10000:
+            raise ValidationError({"note": "Use a note of at most 10000 characters."})
+        if decision == "request_changes" and not note.strip():
+            raise ValidationError({"note": "Explain the changes needed."})
+        item.status = "done" if decision == "approve" else "in_progress"
+        item.save(update_fields=("status", "updated_at"))
+        record_activity(item, request.user, "approved" if decision == "approve" else "changes_requested", note=note.strip())
+        return Response(self.get_serializer(item).data)
 
 
 class WorkUserViewSet(viewsets.ReadOnlyModelViewSet):
