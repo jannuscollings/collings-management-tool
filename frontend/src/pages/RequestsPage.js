@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 
 import { workRequestsApi } from "../api/workRequests";
 import PageContainer from "../components/layout/PageContainer";
+import { DrawerLink } from "../components/work/WorkItemDrawer";
 import Badge from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import PageHeader from "../components/ui/PageHeader";
@@ -45,7 +46,7 @@ export default function RequestsPage() {
         description="Review incoming work and route it into a workspace."
         actions={
           <Button asChild>
-            <Link to="/requests/new"><Plus className="h-4 w-4" /> Submit request</Link>
+            <DrawerLink drawer="new-request"><Plus className="h-4 w-4" /> Request internal</DrawerLink>
           </Button>
         }
       />

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { WorkItemLink, useWorkItemContext } from "../components/work/WorkItemDrawer";
+import { DrawerLink, WorkItemLink, useWorkItemContext } from "../components/work/WorkItemDrawer";
 import toast from "react-hot-toast";
 import { LayoutGrid, List, Plus, Search, X } from "lucide-react";
 
@@ -10,7 +10,7 @@ import PageContainer from "../components/layout/PageContainer";
 import WorkspaceKanban from "../components/work/WorkspaceKanban";
 import Badge from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
-import { Field, Input, Select, Textarea } from "../components/ui/Field";
+import { Field, Input, Select } from "../components/ui/Field";
 import PageHeader from "../components/ui/PageHeader";
 import Panel from "../components/ui/Panel";
 
@@ -34,34 +34,20 @@ const STATUS_VARIANTS = {
   done: "success",
 };
 
-const emptyForm = {
-  group: "",
-  title: "",
-  brief: "",
-  priority: "medium",
-  owner: "",
-  reviewer: "",
-  due_date: "",
-};
-
 export default function WorkspacePage() {
   const { revision } = useWorkItemContext();
   const isAdmin = useSelector((state) => state.auth.user?.is_staff);
   const { workspaceSlug } = useParams();
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [workspace, setWorkspace] = useState(null);
   const [workItems, setWorkItems] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [itemsLoading, setItemsLoading] = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [savingItemIds, setSavingItemIds] = useState(() => new Set());
   const pendingMoves = useRef(new Set());
   const fetchSequence = useRef(0);
   const [moveRevision, setMoveRevision] = useState(0);
-  const [form, setForm] = useState(emptyForm);
 
   const viewMode = searchParams.get("view") === "kanban" ? "kanban" : "table";
   const querySearch = searchParams.get("q") || "";
@@ -81,10 +67,6 @@ export default function WorkspacePage() {
         if (!active) return;
         setWorkspace(workspaceResponse.data);
         setUsers(usersResponse.data);
-        setForm((current) => ({
-          ...current,
-          group: current.group || String(workspaceResponse.data.groups[0]?.id || ""),
-        }));
       })
       .catch(() => {
         if (active) toast.error("Couldn't load the workspace");
@@ -202,36 +184,6 @@ export default function WorkspacePage() {
     }
   };
 
-  const updateForm = (field) => (event) => {
-    setForm((current) => ({ ...current, [field]: event.target.value }));
-  };
-
-  const createItem = async (event) => {
-    event.preventDefault();
-    if (!form.title.trim() || !form.group) return;
-    setSaving(true);
-    try {
-      const payload = {
-        ...form,
-        group: Number(form.group),
-        title: form.title.trim(),
-        owner: form.owner ? Number(form.owner) : null,
-        reviewer: form.reviewer ? Number(form.reviewer) : null,
-        due_date: form.due_date || null,
-      };
-      const { data } = await workApi.createItem(payload);
-      toast.success(`${data.reference} created`);
-      setShowCreate(false);
-      setForm({ ...emptyForm, group: form.group });
-      navigate(`/workspaces/${workspaceSlug}/items/${data.id}`);
-    } catch (error) {
-      const message = error.response?.data?.title?.[0] || "Couldn't create the work item";
-      toast.error(message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
   if (loading) return <PageContainer className="text-sm text-muted">Loading workspace…</PageContainer>;
   if (!workspace) return <PageContainer className="text-sm text-copy">Workspace unavailable.</PageContainer>;
 
@@ -265,59 +217,14 @@ export default function WorkspacePage() {
                 <LayoutGrid className="h-3.5 w-3.5" /> Kanban
               </button>
             </div>
-            {isAdmin && <Button
-              variant={showCreate ? "secondary" : "primary"}
-              onClick={() => setShowCreate((visible) => !visible)}
-            >
-              {showCreate ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-              {showCreate ? "Cancel" : "New work item"}
+            {isAdmin && <Button asChild>
+              <DrawerLink drawer="new-work-item" drawerParams={{ drawerWorkspace: workspaceSlug }}>
+                <Plus className="h-4 w-4" /> New work item
+              </DrawerLink>
             </Button>}
           </>
         }
       />
-
-      {isAdmin && showCreate && (
-        <Panel className="mb-7 p-5 sm:p-6">
-          <form onSubmit={createItem} className="grid gap-5 sm:grid-cols-2">
-          <Field label="Title">
-            <Input required value={form.title} onChange={updateForm("title")} />
-          </Field>
-          <Field label="Group">
-            <Select required value={form.group} onChange={updateForm("group")}>
-              {workspace.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
-            </Select>
-          </Field>
-          <Field label="Brief" className="sm:col-span-2">
-            <Textarea rows="3" value={form.brief} onChange={updateForm("brief")} />
-          </Field>
-          <Field label="Owner">
-            <Select value={form.owner} onChange={updateForm("owner")}>
-              <option value="">Unassigned</option>
-              {users.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}
-            </Select>
-          </Field>
-          <Field label="Reviewer">
-            <Select value={form.reviewer} onChange={updateForm("reviewer")}>
-              <option value="">Unassigned</option>
-              {users.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}
-            </Select>
-          </Field>
-          <Field label="Due date">
-            <Input type="date" value={form.due_date} onChange={updateForm("due_date")} />
-          </Field>
-          <Field label="Priority">
-            <Select value={form.priority} onChange={updateForm("priority")}>
-              {WORK_PRIORITY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </Select>
-          </Field>
-          <div className="sm:col-span-2">
-            <Button type="submit" disabled={saving}>
-              {saving ? "Creating…" : "Create work item"}
-            </Button>
-          </div>
-          </form>
-        </Panel>
-      )}
 
       <Panel className="mb-5 p-4">
         <div className="grid gap-3 sm:grid-cols-2 shell:grid-cols-[minmax(230px,2fr)_repeat(3,minmax(140px,1fr))_auto] shell:items-end">

@@ -1,7 +1,9 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
+from django.db import transaction
 from django.db.models import Prefetch
+from django.utils.text import slugify
 
 from .models import WorkGroup, WorkItem, Workspace, SubWork, WorkComment, WorkActivity, WorkLink
 from .access import is_admin, visible_items, can_edit, allowed_statuses
@@ -117,7 +119,7 @@ class WorkspaceSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Workspace
-        fields = ("id", "name", "slug", "display_order", "groups")
+        fields = ("id", "name", "slug", "display_order", "archived", "groups")
 
     def get_groups(self, workspace):
         items = visible_items(WorkItem.objects.select_related(
@@ -127,6 +129,51 @@ class WorkspaceSerializer(serializers.ModelSerializer):
             Prefetch("work_items", queryset=items, to_attr="visible_work_items")
         )
         return WorkGroupSerializer(groups, many=True, context=self.context).data
+
+
+class WorkspaceSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Workspace
+        fields = ("id", "name", "slug", "display_order", "archived")
+        read_only_fields = fields
+
+
+class WorkspaceCreateSerializer(serializers.ModelSerializer):
+    initial_group_name = serializers.CharField(max_length=120, write_only=True)
+    slug = serializers.SlugField(max_length=140, required=False)
+
+    class Meta:
+        model = Workspace
+        fields = ("id", "name", "slug", "display_order", "archived", "initial_group_name")
+        read_only_fields = ("id", "display_order", "archived")
+
+    def validate(self, attrs):
+        slug = attrs.get("slug") or slugify(attrs["name"])
+        if not slug:
+            raise serializers.ValidationError({"slug": "Enter a name that can form a URL."})
+        if Workspace.objects.filter(slug=slug).exists():
+            raise serializers.ValidationError({"slug": "A workspace already uses this URL slug."})
+        attrs["slug"] = slug
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        initial_group_name = validated_data.pop("initial_group_name")
+        highest_order = Workspace.objects.select_for_update().order_by("-display_order").values_list(
+            "display_order", flat=True
+        ).first()
+        workspace = Workspace.objects.create(
+            display_order=(highest_order or 0) + 1,
+            **validated_data,
+        )
+        WorkGroup.objects.create(workspace=workspace, name=initial_group_name, display_order=1)
+        return workspace
+
+
+class WorkspaceUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Workspace
+        fields = ("name",)
 
 
 class SubWorkSerializer(serializers.ModelSerializer):

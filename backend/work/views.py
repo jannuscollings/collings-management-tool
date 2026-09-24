@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.db import transaction
+from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -13,15 +14,101 @@ from rest_framework import mixins, viewsets
 from rest_framework.exceptions import ValidationError
 
 from .models import WorkItem, Workspace
-from .serializers import WorkItemSerializer, WorkspaceSerializer, WorkUserSerializer
+from .serializers import (
+    WorkItemSerializer,
+    WorkspaceCreateSerializer,
+    WorkspaceSerializer,
+    WorkspaceSummarySerializer,
+    WorkspaceUpdateSerializer,
+    WorkUserSerializer,
+)
 
 User = get_user_model()
 
 
-class WorkspaceViewSet(viewsets.ReadOnlyModelViewSet):
-    serializer_class = WorkspaceSerializer
+class WorkspaceViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
     lookup_field = "slug"
-    queryset = Workspace.objects.filter(archived=False)
+    queryset = Workspace.objects.all()
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if is_admin(self.request.user):
+            if self.action == "list" and self.request.query_params.get("include_archived") != "true":
+                return queryset.filter(archived=False)
+            return queryset
+        return queryset.filter(archived=False)
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return WorkspaceCreateSerializer
+        if self.action in ("update", "partial_update"):
+            return WorkspaceUpdateSerializer
+        if self.action == "list":
+            return WorkspaceSummarySerializer
+        return WorkspaceSerializer
+
+    def require_admin(self):
+        if not is_admin(self.request.user):
+            raise PermissionDenied("Only administrators can manage workspaces.")
+
+    def create(self, request, *args, **kwargs):
+        self.require_admin()
+        response = super().create(request, *args, **kwargs)
+        workspace = Workspace.objects.get(pk=response.data["id"])
+        response.data = WorkspaceSummarySerializer(workspace).data
+        return response
+
+    def update(self, request, *args, **kwargs):
+        self.require_admin()
+        return super().update(request, *args, **kwargs)
+
+    @action(detail=True, methods=["post"])
+    @transaction.atomic
+    def archive(self, request, slug=None):
+        self.require_admin()
+        workspace = Workspace.objects.select_for_update().get(pk=self.get_object().pk)
+        workspace.archived = True
+        workspace.save(update_fields=("archived", "updated_at"))
+        return Response(WorkspaceSummarySerializer(workspace).data)
+
+    @action(detail=True, methods=["post"])
+    @transaction.atomic
+    def restore(self, request, slug=None):
+        self.require_admin()
+        workspace = Workspace.objects.select_for_update().get(pk=self.get_object().pk)
+        workspace.archived = False
+        workspace.save(update_fields=("archived", "updated_at"))
+        return Response(WorkspaceSummarySerializer(workspace).data)
+
+    @action(detail=False, methods=["post"])
+    @transaction.atomic
+    def reorder(self, request):
+        self.require_admin()
+        workspace_ids = request.data.get("workspace_ids")
+        if not isinstance(workspace_ids, list) or any(type(value) is not int for value in workspace_ids):
+            raise ValidationError({"workspace_ids": "Provide an ordered list of workspace IDs."})
+        if len(workspace_ids) != len(set(workspace_ids)):
+            raise ValidationError({"workspace_ids": "Each active workspace must appear once."})
+
+        workspaces = list(Workspace.objects.select_for_update().filter(archived=False))
+        if set(workspace_ids) != {workspace.pk for workspace in workspaces}:
+            raise ValidationError({"workspace_ids": "Include every active workspace exactly once."})
+        by_id = {workspace.pk: workspace for workspace in workspaces}
+        now = timezone.now()
+        ordered = []
+        for index, workspace_id in enumerate(workspace_ids, start=1):
+            workspace = by_id[workspace_id]
+            workspace.display_order = index
+            workspace.updated_at = now
+            ordered.append(workspace)
+        Workspace.objects.bulk_update(ordered, ("display_order", "updated_at"))
+        return Response(WorkspaceSummarySerializer(ordered, many=True).data)
 
 
 class WorkItemViewSet(

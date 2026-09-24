@@ -1,10 +1,10 @@
-import { useDispatch, useSelector } from "react-redux";
 import { NavLink } from "react-router-dom";
-import { Briefcase, Inbox, LogOut, Moon, Palette, Sun, Ticket } from "lucide-react";
+import { Briefcase, Inbox, Layers3, Settings2, Ticket } from "lucide-react";
 
-import { useTheme } from "../../contexts/ThemeContext";
 import { cn } from "../../lib/cn";
-import { logout } from "../../store/slices/authSlice";
+import { useSelector } from "react-redux";
+import { DrawerLink, useWorkItemContext } from "../work/WorkItemDrawer";
+import AccountMenu from "./AccountMenu";
 
 const groups = [
   {
@@ -13,14 +13,6 @@ const groups = [
       { to: "/my-work", label: "My Work", icon: Briefcase },
       { to: "/requests", label: "Requests", icon: Inbox },
     ],
-  },
-  {
-    label: "Workspaces",
-    items: [{ to: "/workspaces/creative-design", label: "Creative & Design", icon: Palette }],
-  },
-  {
-    label: "Demo",
-    items: [{ to: "/", label: "Tickets", icon: Ticket }],
   },
 ];
 
@@ -31,9 +23,8 @@ const navItemClass = ({ isActive }) =>
   );
 
 export default function Sidebar() {
-  const dispatch = useDispatch();
   const user = useSelector((state) => state.auth.user);
-  const { theme, toggle } = useTheme();
+  const { workspaces } = useWorkItemContext();
 
   return (
     <aside className="sticky top-0 hidden h-screen flex-col overflow-y-auto border-r border-line bg-surface px-4 py-[18px] shell:flex">
@@ -61,19 +52,34 @@ export default function Sidebar() {
             </div>
           </div>
         ))}
+        <div className="mb-3">
+          <div className="flex items-center justify-between px-2.5 pb-1.5 pt-2">
+            <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-muted">Workspaces</p>
+            {user?.is_staff && (
+              <DrawerLink drawer="workspaces" className="rounded-ds-xs p-1 text-muted hover:bg-canvas hover:text-copy" aria-label="Manage workspaces">
+                <Settings2 className="h-3.5 w-3.5" />
+              </DrawerLink>
+            )}
+          </div>
+          <div className="space-y-1">
+            {workspaces.map((workspace) => (
+              <NavLink key={workspace.id} to={`/workspaces/${workspace.slug}`} className={navItemClass}>
+                <Layers3 className="h-4 w-4" aria-hidden="true" />
+                <span className="truncate">{workspace.name}</span>
+              </NavLink>
+            ))}
+          </div>
+        </div>
+        <div className="mb-3">
+          <p className="px-2.5 pb-1.5 pt-2 text-[9px] font-extrabold uppercase tracking-[0.14em] text-muted">Demo</p>
+          <NavLink to="/" end className={navItemClass}>
+            <Ticket className="h-4 w-4" aria-hidden="true" /> Tickets
+          </NavLink>
+        </div>
       </nav>
 
       <div className="border-t border-line pt-4">
-        <p className="truncate px-2.5 text-xs font-semibold text-copy">{user?.email}</p>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <button onClick={toggle} className="flex min-h-[38px] items-center justify-center gap-2 rounded-ds-sm border border-line bg-surface text-xs font-bold text-copy hover:bg-canvas">
-            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            Theme
-          </button>
-          <button onClick={() => dispatch(logout())} className="flex min-h-[38px] items-center justify-center gap-2 rounded-ds-sm border border-line bg-surface text-xs font-bold text-copy hover:bg-canvas">
-            <LogOut className="h-4 w-4" /> Sign out
-          </button>
-        </div>
+        <AccountMenu />
       </div>
     </aside>
   );

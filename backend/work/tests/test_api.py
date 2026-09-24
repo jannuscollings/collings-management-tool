@@ -376,6 +376,126 @@ class WorkApiTests(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_admin_can_create_workspace_with_initial_group(self):
+        self.client.force_authenticate(self.user)
+
+        response = self.client.post(
+            "/api/workspaces/",
+            {"name": "Video Production", "initial_group_name": "Incoming projects"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        workspace = Workspace.objects.get(slug="video-production")
+        self.assertEqual(response.data["id"], workspace.pk)
+        self.assertTrue(workspace.groups.filter(name="Incoming projects").exists())
+        self.assertGreater(workspace.display_order, self.workspace.display_order)
+
+    def test_non_admin_cannot_manage_workspaces(self):
+        self.client.force_authenticate(self.assignee)
+
+        create = self.client.post(
+            "/api/workspaces/",
+            {"name": "Video", "initial_group_name": "Production"},
+            format="json",
+        )
+        rename = self.client.patch(
+            "/api/workspaces/creative-design/",
+            {"name": "Renamed"},
+            format="json",
+        )
+        archive = self.client.post("/api/workspaces/creative-design/archive/", {}, format="json")
+        reorder = self.client.post(
+            "/api/workspaces/reorder/",
+            {"workspace_ids": [self.workspace.pk]},
+            format="json",
+        )
+
+        self.assertEqual(create.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(rename.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(archive.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(reorder.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_can_rename_archive_and_restore_workspace_without_changing_slug(self):
+        self.client.force_authenticate(self.user)
+
+        renamed = self.client.patch(
+            "/api/workspaces/creative-design/",
+            {"name": "Creative Studio", "slug": "changed-slug"},
+            format="json",
+        )
+        archived = self.client.post("/api/workspaces/creative-design/archive/", {}, format="json")
+        self.client.force_authenticate(self.assignee)
+        hidden = self.client.get("/api/workspaces/creative-design/")
+        self.client.force_authenticate(self.user)
+        restored = self.client.post("/api/workspaces/creative-design/restore/", {}, format="json")
+
+        self.workspace.refresh_from_db()
+        self.assertEqual(renamed.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.workspace.name, "Creative Studio")
+        self.assertEqual(self.workspace.slug, "creative-design")
+        self.assertEqual(archived.status_code, status.HTTP_200_OK)
+        self.assertEqual(hidden.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(restored.status_code, status.HTTP_200_OK)
+        self.assertFalse(restored.data["archived"])
+
+    def test_admin_can_persist_active_workspace_order(self):
+        video = Workspace.objects.create(name="Video", slug="video", display_order=2)
+        self.client.force_authenticate(self.user)
+
+        response = self.client.post(
+            "/api/workspaces/reorder/",
+            {"workspace_ids": [video.pk, self.workspace.pk]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual([workspace["id"] for workspace in response.data], [video.pk, self.workspace.pk])
+        self.assertEqual(
+            list(Workspace.objects.filter(archived=False).values_list("pk", flat=True)),
+            [video.pk, self.workspace.pk],
+        )
+
+    def test_workspace_list_respects_order_and_only_admin_can_include_archived(self):
+        video = Workspace.objects.create(name="Video", slug="video", display_order=2)
+        archived = Workspace.objects.create(name="Archive", slug="archive", display_order=3, archived=True)
+        self.client.force_authenticate(self.assignee)
+
+        regular = self.client.get("/api/workspaces/", {"include_archived": "true"})
+        self.client.force_authenticate(self.user)
+        admin = self.client.get("/api/workspaces/", {"include_archived": "true"})
+
+        self.assertEqual(regular.status_code, status.HTTP_200_OK)
+        self.assertEqual([workspace["id"] for workspace in regular.data], [self.workspace.pk, video.pk])
+        self.assertEqual(
+            [workspace["id"] for workspace in admin.data],
+            [self.workspace.pk, video.pk, archived.pk],
+        )
+
+    def test_workspace_reorder_rejects_incomplete_list_without_changes(self):
+        video = Workspace.objects.create(name="Video", slug="video", display_order=2)
+        before = list(Workspace.objects.filter(archived=False).values_list("pk", "display_order"))
+        self.client.force_authenticate(self.user)
+
+        response = self.client.post(
+            "/api/workspaces/reorder/",
+            {"workspace_ids": [video.pk]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            list(Workspace.objects.filter(archived=False).values_list("pk", "display_order")),
+            before,
+        )
+
+    def test_workspace_delete_is_not_exposed(self):
+        self.client.force_authenticate(self.user)
+
+        response = self.client.delete("/api/workspaces/creative-design/")
+
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
     def test_seed_demo_is_idempotent_for_work_items(self):
         call_command("seed_demo", verbosity=0)
         call_command("seed_demo", verbosity=0)
