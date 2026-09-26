@@ -44,8 +44,6 @@ def accept_work_request(request_id, actor):
     )
     if destination_group.archived or destination_group.workspace.archived:
         raise RequestAcceptanceError("The destination group or workspace is archived.")
-    if destination_group.workspace.slug != "creative-design":
-        raise RequestAcceptanceError("This request slice only supports Creative & Design.")
 
     assigned_user_ids = {
         user_id

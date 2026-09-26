@@ -86,8 +86,6 @@ class WorkRequestTriageSerializer(serializers.ModelSerializer):
     def validate_destination_group(self, group):
         if group.archived or group.workspace.archived:
             raise serializers.ValidationError("Select an active group in an active workspace.")
-        if group.workspace.slug != "creative-design":
-            raise serializers.ValidationError("This request slice only supports Creative & Design.")
         return group
 
     def validate(self, attrs):
@@ -96,4 +94,3 @@ class WorkRequestTriageSerializer(serializers.ModelSerializer):
             if user is not None and not user.is_active:
                 raise serializers.ValidationError({field_name: "Select an active user."})
         return attrs
-

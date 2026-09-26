@@ -139,15 +139,28 @@ class WorkspaceSummarySerializer(serializers.ModelSerializer):
 
 
 class WorkspaceCreateSerializer(serializers.ModelSerializer):
-    initial_group_name = serializers.CharField(max_length=120, write_only=True)
+    initial_group_name = serializers.CharField(max_length=120, write_only=True, required=False)
+    board_names = serializers.ListField(child=serializers.CharField(max_length=120), write_only=True, required=False)
     slug = serializers.SlugField(max_length=140, required=False)
 
     class Meta:
         model = Workspace
-        fields = ("id", "name", "slug", "display_order", "archived", "initial_group_name")
+        fields = ("id", "name", "slug", "display_order", "archived", "initial_group_name", "board_names")
         read_only_fields = ("id", "display_order", "archived")
 
     def validate(self, attrs):
+        names = attrs.get("board_names")
+        initial = attrs.get("initial_group_name")
+        if names is not None and initial is not None:
+            raise serializers.ValidationError({"board_names": "Use one board name format."})
+        names = names if names is not None else ([initial] if initial is not None else [])
+        names = [name.strip() for name in names]
+        if not names or any(not name for name in names):
+            raise serializers.ValidationError({"board_names": "Provide at least one nonblank board name."})
+        if len({name.casefold() for name in names}) != len(names):
+            raise serializers.ValidationError({"board_names": "Board names must be unique within a workspace."})
+        attrs["board_names"] = names
+        attrs.pop("initial_group_name", None)
         slug = attrs.get("slug") or slugify(attrs["name"])
         if not slug:
             raise serializers.ValidationError({"slug": "Enter a name that can form a URL."})
@@ -158,7 +171,7 @@ class WorkspaceCreateSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
-        initial_group_name = validated_data.pop("initial_group_name")
+        board_names = validated_data.pop("board_names")
         highest_order = Workspace.objects.select_for_update().order_by("-display_order").values_list(
             "display_order", flat=True
         ).first()
@@ -166,7 +179,8 @@ class WorkspaceCreateSerializer(serializers.ModelSerializer):
             display_order=(highest_order or 0) + 1,
             **validated_data,
         )
-        WorkGroup.objects.create(workspace=workspace, name=initial_group_name, display_order=1)
+        for order, name in enumerate(board_names, start=1):
+            WorkGroup.objects.create(workspace=workspace, name=name, display_order=order)
         return workspace
 
 

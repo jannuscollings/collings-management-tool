@@ -29,15 +29,20 @@ export default function RequestDetailPanel({ requestId, drawer = false, onChange
   useEffect(() => {
     let active = true;
     setLoading(true);
-    Promise.all([workRequestsApi.get(requestId), workApi.getWorkspace("creative-design"), workApi.listUsers()])
-      .then(([requestResponse, workspaceResponse, usersResponse]) => {
+    Promise.all([workRequestsApi.get(requestId), workApi.listWorkspaces(), workApi.listUsers()])
+      .then(async ([requestResponse, workspacesResponse, usersResponse]) => {
         if (!active) return;
         const data = requestResponse.data;
+        const destinations = isAdmin && data.status !== "accepted" && data.status !== "rejected"
+          ? (await Promise.all(workspacesResponse.data.map((workspace) => workApi.getWorkspace(workspace.slug))))
+            .flatMap(({ data: workspace }) => workspace.groups.map((group) => ({ ...group, workspace_name: workspace.name })))
+          : [];
+        if (!active) return;
         setRequest(data);
-        setGroups(workspaceResponse.data.groups);
+        setGroups(destinations);
         setUsers(usersResponse.data);
         setTriage({
-          destination_group: String(data.destination_group || workspaceResponse.data.groups[0]?.id || ""),
+          destination_group: String(data.destination_group || destinations[0]?.id || ""),
           triage_priority: data.triage_priority || "",
           triage_due_date: data.triage_due_date || "",
           owner: data.owner ? String(data.owner) : "",
@@ -48,7 +53,7 @@ export default function RequestDetailPanel({ requestId, drawer = false, onChange
       .catch(() => toast.error("Couldn't load the request"))
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [requestId, onDirty]);
+  }, [requestId, onDirty, isAdmin]);
 
   useEffect(() => { onBusy(saving); }, [saving, onBusy]);
 
@@ -136,7 +141,7 @@ export default function RequestDetailPanel({ requestId, drawer = false, onChange
     {isAdmin && !terminal && <Panel className="p-5 sm:p-6">
       <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-brand-strong dark:text-brand">Triage</p><h2 className="mt-1 text-lg font-extrabold text-ink">Route into delivery</h2><p className="mt-1 text-xs text-muted">Choose a destination and optionally adjust delivery details.</p>
       <form onSubmit={saveTriage} className="mt-5 grid gap-5 sm:grid-cols-2">
-        <Field label="Destination" className="sm:col-span-2"><Select required value={triage.destination_group} onChange={updateTriage("destination_group")}>{groups.map((group) => <option key={group.id} value={group.id}>Creative &amp; Design / {group.name}</option>)}</Select></Field>
+        <Field label="Destination" className="sm:col-span-2"><Select required value={triage.destination_group} onChange={updateTriage("destination_group")}><option value="" disabled>Choose a board</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.workspace_name} / {group.name}</option>)}</Select></Field>
         <Field label="Priority override" hint={`Submitted priority: ${request.priority}`}><Select value={triage.triage_priority} onChange={updateTriage("triage_priority")}><option value="">Use submitted priority</option>{REQUEST_PRIORITY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select></Field>
         <Field label="Due-date override" hint={request.requested_due_date ? `Requested date: ${request.requested_due_date}` : "No date requested"}><Input type="date" value={triage.triage_due_date} onChange={updateTriage("triage_due_date")} /></Field>
         <Field label="Owner"><Select value={triage.owner} onChange={updateTriage("owner")}><option value="">Unassigned</option>{users.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</Select></Field>

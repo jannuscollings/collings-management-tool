@@ -391,6 +391,74 @@ class WorkApiTests(TestCase):
         self.assertTrue(workspace.groups.filter(name="Incoming projects").exists())
         self.assertGreater(workspace.display_order, self.workspace.display_order)
 
+    def test_workspace_creation_with_multiple_boards_is_validated_and_atomic(self):
+        self.client.force_authenticate(self.user)
+        invalid = self.client.post("/api/workspaces/", {"name": "Video", "board_names": ["Production", "production"]}, format="json")
+        blank = self.client.post("/api/workspaces/", {"name": "Video", "board_names": ["Production", " "]}, format="json")
+        missing = self.client.post("/api/workspaces/", {"name": "Video", "board_names": []}, format="json")
+        self.assertEqual([invalid.status_code, blank.status_code, missing.status_code], [400, 400, 400])
+        self.assertFalse(Workspace.objects.filter(slug="video").exists())
+
+        response = self.client.post("/api/workspaces/", {"name": "Video", "board_names": ["Production", "Editing"]}, format="json")
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(list(Workspace.objects.get(slug="video").groups.values_list("name", flat=True)), ["Production", "Editing"])
+
+    def test_admin_board_management_and_order(self):
+        self.client.force_authenticate(self.user)
+        url = "/api/workspaces/creative-design/boards/"
+        created = self.client.post(url, {"name": "New delivery"}, format="json")
+        self.assertEqual(created.status_code, 201)
+        board_id = created.data[-1]["id"]
+        duplicate = self.client.post(url, {"name": "new DELIVERY"}, format="json")
+        self.assertEqual(duplicate.status_code, 400)
+        renamed = self.client.patch(f"{url}{board_id}/", {"name": "Delivery"}, format="json")
+        self.assertEqual(renamed.status_code, 200)
+        ids = [board["id"] for board in renamed.data]
+        rejected = self.client.post(f"{url}reorder/", {"board_ids": ids[:-1]}, format="json")
+        self.assertEqual(rejected.status_code, 400)
+        ordered = self.client.post(f"{url}reorder/", {"board_ids": list(reversed(ids))}, format="json")
+        self.assertEqual([board["id"] for board in ordered.data], list(reversed(ids)))
+        self.assertEqual(self.client.delete(f"{url}{board_id}/").status_code, 200)
+
+    def test_board_delete_blocks_items_and_routed_requests(self):
+        from intake.models import WorkRequest
+        self.client.force_authenticate(self.user)
+        url = f"/api/workspaces/creative-design/boards/{self.group.pk}/"
+        item = WorkItem.objects.create(group=self.group, title="Keep", created_by=self.user)
+        blocked = self.client.delete(url)
+        self.assertEqual(blocked.status_code, 400)
+        self.assertIn("work items", blocked.data["detail"])
+        listed = self.client.get("/api/workspaces/creative-design/boards/")
+        self.assertEqual(next(board for board in listed.data if board["id"] == self.group.pk)["work_item_count"], 1)
+        self.assertTrue(WorkItem.objects.filter(pk=item.pk).exists())
+        item.delete()
+        WorkRequest.objects.create(title="Route", submitted_by=self.assignee, destination_group=self.group)
+        routed = self.client.delete(url)
+        self.assertEqual(routed.status_code, 400)
+        self.assertTrue(WorkGroup.objects.filter(pk=self.group.pk).exists())
+
+    def test_last_board_and_archived_workspace_cannot_be_modified(self):
+        workspace = Workspace.objects.create(name="Solo", slug="solo")
+        board = WorkGroup.objects.create(workspace=workspace, name="Only")
+        self.client.force_authenticate(self.user)
+        self.assertEqual(self.client.delete(f"/api/workspaces/solo/boards/{board.pk}/").status_code, 400)
+        workspace.archived = True
+        workspace.save()
+        self.assertEqual(self.client.post("/api/workspaces/solo/boards/", {"name": "New"}, format="json").status_code, 400)
+        self.assertEqual(self.client.patch(f"/api/workspaces/solo/boards/{board.pk}/", {"name": "Other"}, format="json").status_code, 400)
+        self.assertEqual(self.client.post("/api/workspaces/solo/boards/reorder/", {"board_ids": [board.pk]}, format="json").status_code, 400)
+
+    def test_non_admin_cannot_manage_boards(self):
+        self.client.force_authenticate(self.assignee)
+        url = "/api/workspaces/creative-design/boards/"
+        responses = [
+            self.client.get(url), self.client.post(url, {"name": "No"}, format="json"),
+            self.client.patch(f"{url}{self.group.pk}/", {"name": "No"}, format="json"),
+            self.client.delete(f"{url}{self.group.pk}/"),
+            self.client.post(f"{url}reorder/", {"board_ids": []}, format="json"),
+        ]
+        self.assertTrue(all(response.status_code == 403 for response in responses))
+
     def test_non_admin_cannot_manage_workspaces(self):
         self.client.force_authenticate(self.assignee)
 

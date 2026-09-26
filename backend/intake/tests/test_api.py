@@ -8,7 +8,7 @@ from rest_framework.test import APIClient
 
 from intake.models import WorkRequest
 from intake.services import accept_work_request
-from work.models import WorkItem, Workspace
+from work.models import WorkGroup, WorkItem, Workspace
 
 User = get_user_model()
 
@@ -141,6 +141,26 @@ class WorkRequestApiTests(TestCase):
 
         self.assertEqual(archived_response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(inactive_response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_triage_and_accept_can_route_to_another_active_workspace(self):
+        workspace = Workspace.objects.create(name="Website", slug="website")
+        board = WorkGroup.objects.create(workspace=workspace, name="Landing pages")
+        work_request = self.create_request()
+        self.client.force_authenticate(self.triager)
+        triaged = self.client.post(f"/api/requests/{work_request.pk}/triage/", {"destination_group": board.pk}, format="json")
+        self.assertEqual(triaged.status_code, 200)
+        accepted = self.client.post(f"/api/requests/{work_request.pk}/accept/")
+        self.assertEqual(accepted.status_code, 201)
+        work_request.refresh_from_db()
+        self.assertEqual(work_request.resulting_work_item.group, board)
+
+    def test_triage_rejects_archived_workspace(self):
+        workspace = Workspace.objects.create(name="Archive", slug="archive", archived=True)
+        board = WorkGroup.objects.create(workspace=workspace, name="Old")
+        work_request = self.create_request()
+        self.client.force_authenticate(self.triager)
+        response = self.client.post(f"/api/requests/{work_request.pk}/triage/", {"destination_group": board.pk}, format="json")
+        self.assertEqual(response.status_code, 400)
 
     def test_triage_preserves_original_values_and_sets_status(self):
         work_request = self.create_request()

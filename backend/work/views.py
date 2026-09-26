@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.db import transaction
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
@@ -14,7 +14,7 @@ from .serializers import SubWorkSerializer, WorkCommentSerializer, WorkActivityS
 from rest_framework import mixins, viewsets
 from rest_framework.exceptions import ValidationError
 
-from .models import WorkItem, Workspace
+from .models import WorkGroup, WorkItem, Workspace
 from .serializers import (
     WorkItemSerializer,
     WorkspaceCreateSerializer,
@@ -68,6 +68,78 @@ class WorkspaceViewSet(
     def update(self, request, *args, **kwargs):
         self.require_admin()
         return super().update(request, *args, **kwargs)
+
+    @staticmethod
+    def board_data(workspace):
+        return list(workspace.groups.filter(archived=False).annotate(
+            work_item_count=Count("work_items", distinct=True),
+            request_count=Count("routed_work_requests", distinct=True),
+        ).order_by("display_order", "name").values("id", "name", "display_order", "work_item_count", "request_count"))
+
+    @action(detail=True, methods=["get", "post"])
+    @transaction.atomic
+    def boards(self, request, slug=None):
+        self.require_admin()
+        workspace = Workspace.objects.select_for_update().get(pk=self.get_object().pk)
+        if request.method == "GET":
+            return Response(self.board_data(workspace))
+        if workspace.archived:
+            raise ValidationError({"detail": "Restore the workspace before managing boards."})
+        name = request.data.get("name")
+        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 120:
+            raise ValidationError({"name": "Enter a board name of up to 120 characters."})
+        name = name.strip()
+        if workspace.groups.filter(name__iexact=name).exists():
+            raise ValidationError({"name": "A board with this name already exists."})
+        highest = workspace.groups.order_by("-display_order").values_list("display_order", flat=True).first()
+        WorkGroup.objects.create(workspace=workspace, name=name, display_order=(highest or 0) + 1)
+        return Response(self.board_data(workspace), status=201)
+
+    @action(detail=True, methods=["patch", "delete"], url_path=r"boards/(?P<board_id>\d+)")
+    @transaction.atomic
+    def board(self, request, slug=None, board_id=None):
+        self.require_admin()
+        workspace = Workspace.objects.select_for_update().get(pk=self.get_object().pk)
+        if workspace.archived:
+            raise ValidationError({"detail": "Restore the workspace before managing boards."})
+        board = get_object_or_404(WorkGroup.objects.select_for_update(), pk=board_id, workspace=workspace, archived=False)
+        if request.method == "PATCH":
+            name = request.data.get("name")
+            if not isinstance(name, str) or not name.strip() or len(name.strip()) > 120:
+                raise ValidationError({"name": "Enter a board name of up to 120 characters."})
+            name = name.strip()
+            if workspace.groups.filter(name__iexact=name).exclude(pk=board.pk).exists():
+                raise ValidationError({"name": "A board with this name already exists."})
+            board.name = name
+            board.save(update_fields=("name",))
+            return Response(self.board_data(workspace))
+        if board.work_items.exists():
+            raise ValidationError({"detail": "This board contains work items. Move them manually before deleting it."})
+        if board.routed_work_requests.exists():
+            raise ValidationError({"detail": "This board is used by requests and cannot be deleted."})
+        if workspace.groups.filter(archived=False).count() == 1:
+            raise ValidationError({"detail": "A workspace must keep at least one board."})
+        board.delete()
+        return Response(self.board_data(workspace))
+
+    @action(detail=True, methods=["post"], url_path="boards/reorder")
+    @transaction.atomic
+    def reorder_boards(self, request, slug=None):
+        self.require_admin()
+        workspace = Workspace.objects.select_for_update().get(pk=self.get_object().pk)
+        if workspace.archived:
+            raise ValidationError({"detail": "Restore the workspace before managing boards."})
+        board_ids = request.data.get("board_ids")
+        boards = list(workspace.groups.select_for_update().filter(archived=False))
+        if (not isinstance(board_ids, list) or any(type(value) is not int for value in board_ids)
+                or len(board_ids) != len(set(board_ids))
+                or set(board_ids) != {board.pk for board in boards}):
+            raise ValidationError({"board_ids": "Include every active board exactly once."})
+        by_id = {board.pk: board for board in boards}
+        for order, board_id in enumerate(board_ids, start=1):
+            by_id[board_id].display_order = order
+        WorkGroup.objects.bulk_update(boards, ("display_order",))
+        return Response(self.board_data(workspace))
 
     @action(detail=True, methods=["post"])
     @transaction.atomic
