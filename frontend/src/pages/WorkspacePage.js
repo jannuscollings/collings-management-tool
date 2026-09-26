@@ -8,30 +8,19 @@ import { LayoutGrid, List, Plus, Search, X } from "lucide-react";
 import { WORK_PRIORITY_OPTIONS, WORK_STATUS_OPTIONS, workApi } from "../api/work";
 import PageContainer from "../components/layout/PageContainer";
 import WorkspaceKanban from "../components/work/WorkspaceKanban";
+import WorkspaceTableCell from "../components/work/WorkspaceTableCell";
+import { sortWorkItems, TABLE_COLUMNS } from "./workspaceTable";
 import Badge from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Field, Input, Select } from "../components/ui/Field";
 import PageHeader from "../components/ui/PageHeader";
 import Panel from "../components/ui/Panel";
 
-const PRIORITY_VARIANTS = {
-  low: "neutral",
-  medium: "neutral",
-  high: "warning",
-};
-
 const STATUS_LABELS = {
   new: "New",
   in_progress: "In progress",
   review: "Review",
   done: "Done",
-};
-
-const STATUS_VARIANTS = {
-  new: "neutral",
-  in_progress: "info",
-  review: "review",
-  done: "success",
 };
 
 export default function WorkspacePage() {
@@ -45,6 +34,7 @@ export default function WorkspacePage() {
   const [loading, setLoading] = useState(true);
   const [itemsLoading, setItemsLoading] = useState(true);
   const [savingItemIds, setSavingItemIds] = useState(() => new Set());
+  const [savingCell, setSavingCell] = useState(null);
   const pendingMoves = useRef(new Set());
   const fetchSequence = useRef(0);
   const [moveRevision, setMoveRevision] = useState(0);
@@ -54,6 +44,8 @@ export default function WorkspacePage() {
   const statusFilter = searchParams.get("status") || "";
   const priorityFilter = searchParams.get("priority") || "";
   const ownerFilter = searchParams.get("owner") || "";
+  const sortColumn = TABLE_COLUMNS.some(([key]) => key === searchParams.get("sort")) ? searchParams.get("sort") : null;
+  const sortDirection = ["asc", "desc"].includes(searchParams.get("direction")) ? searchParams.get("direction") : null;
   const [searchInput, setSearchInput] = useState(querySearch);
   const currentQuery = useRef("");
   currentQuery.current = JSON.stringify([workspaceSlug, querySearch, statusFilter, priorityFilter, ownerFilter]);
@@ -127,6 +119,24 @@ export default function WorkspacePage() {
       work_items: workItems.filter((item) => item.group === group.id),
     }));
   }, [workspace, workItems]);
+  const tableGroups = useMemo(() => filteredGroups.map((group) => ({
+    ...group,
+    work_items: sortWorkItems(group.work_items, sortColumn, sortDirection),
+  })), [filteredGroups, sortColumn, sortDirection]);
+
+  const changeSort = (column) => {
+    const next = new URLSearchParams(searchParams);
+    if (sortColumn !== column || !sortDirection) {
+      next.set("sort", column);
+      next.set("direction", "asc");
+    } else if (sortDirection === "asc") {
+      next.set("direction", "desc");
+    } else {
+      next.delete("sort");
+      next.delete("direction");
+    }
+    setSearchParams(next);
+  };
 
   const updateFilter = (key) => (event) => {
     const next = new URLSearchParams(searchParams);
@@ -137,7 +147,9 @@ export default function WorkspacePage() {
 
   const clearFilters = () => {
     setSearchInput("");
-    setSearchParams(viewMode === "kanban" ? { view: "kanban" } : {});
+    const next = new URLSearchParams(searchParams);
+    ["q", "status", "priority", "owner"].forEach((key) => next.delete(key));
+    setSearchParams(next);
   };
 
   const changeView = (nextView) => {
@@ -181,6 +193,32 @@ export default function WorkspacePage() {
         next.delete(item.id);
         return next;
       });
+    }
+  };
+
+  const saveCell = async (item, field, value) => {
+    if (!isAdmin || !item.permissions?.manage || itemsLoading || pendingMoves.current.has(item.id)) return;
+    const queryAtStart = currentQuery.current;
+    pendingMoves.current.add(item.id);
+    fetchSequence.current += 1;
+    setSavingCell(`${item.id}:${field}`);
+    try {
+      const { data } = await workApi.updateItem(item.id, { [field]: value });
+      setWorkItems((current) => {
+        if (currentQuery.current !== queryAtStart) return current;
+        if ((statusFilter && data.status !== statusFilter)
+            || (priorityFilter && data.priority !== priorityFilter)
+            || (ownerFilter && String(data.owner || "") !== ownerFilter)) {
+          return current.filter((candidate) => candidate.id !== item.id);
+        }
+        return current.map((candidate) => candidate.id === item.id ? data : candidate);
+      });
+    } catch (error) {
+      const details = error.response?.data;
+      toast.error(details?.[field]?.[0] || details?.detail || `Couldn't update ${field.replace('_', ' ')} for ${item.reference}`);
+    } finally {
+      pendingMoves.current.delete(item.id);
+      setSavingCell(null);
     }
   };
 
@@ -272,7 +310,7 @@ export default function WorkspacePage() {
       </Panel>
 
       <div className={`${viewMode === "kanban" ? "hidden" : ""} space-y-5 transition-opacity ${itemsLoading ? "opacity-70" : "opacity-100"}`}>
-        {filteredGroups.map((group) => (
+        {tableGroups.map((group) => (
           <section key={group.id}>
             <Panel className="overflow-hidden">
               <div className="flex items-center justify-between gap-3 border-b border-line bg-canvas/55 px-4 py-3">
@@ -283,8 +321,10 @@ export default function WorkspacePage() {
                 <table className="w-full min-w-[980px] border-collapse text-left">
                   <thead className="bg-canvas/35">
                     <tr className="border-b border-line">
-                      {["Reference", "Work item", "Status", "Priority", "Owner", "Reviewer", "Due date"].map((heading) => (
-                        <th key={heading} className="px-[13px] py-2.5 text-[9.5px] font-extrabold uppercase tracking-[0.08em] text-muted">{heading}</th>
+                      {TABLE_COLUMNS.map(([column, heading]) => (
+                        <th key={column} scope="col" aria-sort={sortColumn === column && sortDirection ? (sortDirection === "asc" ? "ascending" : "descending") : "none"} className="px-[13px] py-2.5 text-[9.5px] font-extrabold uppercase tracking-[0.08em] text-muted">
+                          <button type="button" onClick={() => changeSort(column)} className="inline-flex items-center gap-1 rounded-ds-xs text-left hover:text-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30">{heading}{sortColumn === column && sortDirection && <span aria-hidden="true">{sortDirection === "asc" ? "↑" : "↓"}</span>}</button>
+                        </th>
                       ))}
                     </tr>
                   </thead>
@@ -303,11 +343,7 @@ export default function WorkspacePage() {
                         <td className="px-[13px] py-3">
                           <WorkItemLink item={item} className="font-bold text-ink hover:text-brand-strong">{item.title}</WorkItemLink>
                         </td>
-                        <td className="px-[13px] py-3"><Badge variant={STATUS_VARIANTS[item.status]}>{STATUS_LABELS[item.status]}</Badge></td>
-                        <td className="px-[13px] py-3"><Badge variant={PRIORITY_VARIANTS[item.priority]} className="capitalize">{item.priority}</Badge></td>
-                        <td className="px-[13px] py-3">{item.owner_detail?.display_name || "Unassigned"}</td>
-                        <td className="px-[13px] py-3">{item.reviewer_detail?.display_name || "Unassigned"}</td>
-                        <td className="px-[13px] py-3">{item.due_date || "—"}</td>
+                        {["status", "priority", "owner", "reviewer", "due_date"].map((field) => <td key={field} className="px-[13px] py-3"><WorkspaceTableCell item={item} field={field} users={users} canEdit={isAdmin && item.permissions?.manage && !itemsLoading && !pendingMoves.current.has(item.id)} busy={savingCell === `${item.id}:${field}`} onSave={saveCell} /></td>)}
                       </tr>
                     ))}
                   </tbody>
