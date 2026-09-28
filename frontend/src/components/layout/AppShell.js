@@ -1,10 +1,9 @@
 import { useSelector } from "react-redux";
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet } from "react-router-dom";
 
 import { cn } from "../../lib/cn";
-import AccountMenu from "./AccountMenu";
 import Sidebar from "./Sidebar";
-import NotificationLink from "./NotificationLink";
+import AppHeader from "./AppHeader";
 import WorkItemDrawer, { DrawerLink, useWorkItemContext } from "../work/WorkItemDrawer";
 
 const mobileLinkClass = ({ isActive }) =>
@@ -18,11 +17,7 @@ function MobileHeader() {
   const { workspaces, workspaceLoadError, retryWorkspaces } = useWorkItemContext();
 
   return (
-    <header className="sticky top-0 z-20 border-b border-line bg-surface/95 backdrop-blur shell:hidden">
-      <div className="flex min-h-14 items-center justify-between gap-3 px-4">
-        <Link to="/home" className="font-bold tracking-[0.16em] text-copy">COLLINGS</Link>
-        <div className="flex items-center gap-2"><NotificationLink /><AccountMenu compact /></div>
-      </div>
+    <header className="sticky top-16 z-20 border-b border-line bg-surface/95 backdrop-blur shell:hidden">
       <nav className="flex gap-1 overflow-x-auto px-2 pb-2" aria-label="Mobile navigation">
         <NavLink to="/home" className={mobileLinkClass}>Home</NavLink>
         <NavLink to="/my-work" className={mobileLinkClass}>My Work</NavLink>
@@ -45,6 +40,7 @@ export default function AppShell() {
     <div className="min-h-screen bg-canvas font-product text-ink shell:grid shell:grid-cols-[250px_minmax(0,1fr)]">
       <Sidebar />
       <div className="min-w-0">
+        <AppHeader />
         <MobileHeader />
         <main id="main-content" className="min-w-0">
           <Outlet />

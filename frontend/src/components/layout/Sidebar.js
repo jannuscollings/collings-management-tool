@@ -4,8 +4,6 @@ import { Briefcase, Inbox, Layers3, Settings2, Ticket } from "lucide-react";
 import { cn } from "../../lib/cn";
 import { useSelector } from "react-redux";
 import { DrawerLink, useWorkItemContext } from "../work/WorkItemDrawer";
-import AccountMenu from "./AccountMenu";
-import NotificationLink from "./NotificationLink";
 
 const groups = [
   {
@@ -81,10 +79,6 @@ export default function Sidebar() {
         </div>
       </nav>
 
-      <div className="border-t border-line pt-4">
-        <NotificationLink />
-        <AccountMenu />
-      </div>
     </aside>
   );
 }

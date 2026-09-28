@@ -155,6 +155,7 @@ export default function WorkItemDrawer({ children }) {
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-[2px]" />
           <Dialog.Content
+            id="cmt-drawer-content"
             onOpenAutoFocus={() => { opener.current = document.activeElement; }}
             onCloseAutoFocus={(event) => { event.preventDefault(); opener.current?.focus(); }}
             className="fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-line bg-canvas font-product text-ink shadow-overlay focus:outline-none sm:max-w-[820px]"

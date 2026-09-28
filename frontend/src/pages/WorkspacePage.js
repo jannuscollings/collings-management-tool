@@ -41,6 +41,7 @@ export default function WorkspacePage() {
 
   const viewMode = searchParams.get("view") === "kanban" ? "kanban" : "table";
   const querySearch = searchParams.get("q") || "";
+  const boardFocus = searchParams.get("board");
   const statusFilter = searchParams.get("status") || "";
   const priorityFilter = searchParams.get("priority") || "";
   const ownerFilter = searchParams.get("owner") || "";
@@ -123,6 +124,17 @@ export default function WorkspacePage() {
     ...group,
     work_items: sortWorkItems(group.work_items, sortColumn, sortDirection),
   })), [filteredGroups, sortColumn, sortDirection]);
+
+  useEffect(() => {
+    if (!workspace || !boardFocus || viewMode !== "table") return undefined;
+    const target = document.getElementById(`board-${boardFocus}`);
+    if (!target) return undefined;
+    const timer = window.setTimeout(() => {
+      target.scrollIntoView({ block: "start" });
+      target.focus({ preventScroll: true });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [workspace, boardFocus, viewMode]);
 
   const changeSort = (column) => {
     const next = new URLSearchParams(searchParams);
@@ -311,7 +323,7 @@ export default function WorkspacePage() {
 
       <div className={`${viewMode === "kanban" ? "hidden" : ""} space-y-5 transition-opacity ${itemsLoading ? "opacity-70" : "opacity-100"}`}>
         {tableGroups.map((group) => (
-          <section key={group.id}>
+          <section key={group.id} id={`board-${group.id}`} tabIndex={-1} className="scroll-mt-20 focus:outline-none">
             <Panel className="overflow-hidden">
               <div className="flex items-center justify-between gap-3 border-b border-line bg-canvas/55 px-4 py-3">
                 <h2 className="text-[13px] font-extrabold tracking-[0.02em] text-ink">{group.name}</h2>
