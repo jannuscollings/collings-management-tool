@@ -6,11 +6,13 @@ import { Briefcase, ChevronUp, LogOut, Moon, Sun } from "lucide-react";
 import { useTheme } from "../../contexts/ThemeContext";
 import { cn } from "../../lib/cn";
 import { logout } from "../../store/slices/authSlice";
+import { useNavigationGuard } from "../navigation/NavigationGuard";
 
 export default function AccountMenu({ compact = false }) {
   const dispatch = useDispatch();
   const user = useSelector((state) => state.auth.user);
   const { theme, toggle } = useTheme();
+  const navigationGuard = useNavigationGuard();
   const name = [user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.email || "Account";
   const initials = ([user?.first_name?.[0], user?.last_name?.[0]].filter(Boolean).join("") || user?.email?.[0] || "A").toUpperCase();
 
@@ -59,7 +61,7 @@ export default function AccountMenu({ compact = false }) {
             {theme === "dark" ? "Use light mode" : "Use dark mode"}
           </DropdownMenu.Item>
           <DropdownMenu.Separator className="my-1 h-px bg-line" />
-          <DropdownMenu.Item onSelect={() => dispatch(logout())} className="flex min-h-[38px] cursor-pointer items-center gap-2.5 rounded-ds-xs px-2.5 text-xs font-semibold text-critical outline-none hover:bg-critical/5 focus:bg-critical/5">
+          <DropdownMenu.Item onSelect={() => { if (navigationGuard?.confirmSignOut() !== false) dispatch(logout()); }} className="flex min-h-[38px] cursor-pointer items-center gap-2.5 rounded-ds-xs px-2.5 text-xs font-semibold text-critical outline-none hover:bg-critical/5 focus:bg-critical/5">
             <LogOut className="h-4 w-4" /> Sign out
           </DropdownMenu.Item>
         </DropdownMenu.Content>

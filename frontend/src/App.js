@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { createBrowserRouter, createRoutesFromElements, Navigate, Route, RouterProvider } from "react-router-dom";
 
 import ProtectedRoute from "./components/ProtectedRoute";
 import LoginPage from "./pages/LoginPage";
@@ -11,11 +11,10 @@ import RequestDetailPage from "./pages/RequestDetailPage";
 import MyWorkPage from "./pages/MyWorkPage";
 import HomePage from "./pages/HomePage";
 import AppShell from "./components/layout/AppShell";
+import NavigationGuard from "./components/navigation/NavigationGuard";
 
-export default function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
+const router = createBrowserRouter(createRoutesFromElements(
+      <Route element={<NavigationGuard />}>
         <Route path="/login" element={<LoginPage />} />
         <Route
           path="/demo"
@@ -42,7 +41,9 @@ export default function App() {
           <Route path="/workspaces/:workspaceSlug/items/:itemId" element={<WorkItemPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
-  );
+      </Route>
+));
+
+export default function App() {
+  return <RouterProvider router={router} />;
 }

@@ -1,7 +1,8 @@
 import "@testing-library/jest-dom";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { createMemoryRouter, createRoutesFromElements, MemoryRouter, Route, RouterProvider, useLocation, useNavigate } from "react-router-dom";
 import WorkItemDrawer from "./WorkItemDrawer";
+import NavigationGuard from "../navigation/NavigationGuard";
 import { workApi } from "../../api/work";
 import { awarenessApi } from "../../api/awareness";
 
@@ -56,10 +57,15 @@ const comment = (id, body, parent = null) => ({
 
 function Location() {
   const location = useLocation();
-  return <output data-testid="location">{location.search}</output>;
+  const navigate = useNavigate();
+  return <><output data-testid="location">{location.search}</output><button onClick={() => {
+    const query = new URLSearchParams(location.search);
+    query.set("view", "kanban");
+    navigate({ pathname: location.pathname, search: query.toString() });
+  }}>Change view</button></>;
 }
 
-function setup({ comments = [], subs = [] } = {}) {
+function setup({ comments = [], subs = [], guarded = false } = {}) {
   workApi.listWorkspaces.mockResolvedValue({ data: [] });
   awarenessApi.notifications.mockResolvedValue({ data: { items: [], unread_count: 0, next_before: null } });
   workApi.getItem.mockResolvedValue({ data: item });
@@ -69,11 +75,38 @@ function setup({ comments = [], subs = [] } = {}) {
   workApi.listLinks.mockResolvedValue({ data: [] });
   workApi.getWorkspace.mockResolvedValue({ data: { groups: [{ id: 1, name: "Production" }] } });
   workApi.listUsers.mockResolvedValue({ data: [{ id: 1, display_name: "Owner" }, { id: 2, display_name: "Other" }] });
+  if (guarded) {
+    const router = createMemoryRouter(createRoutesFromElements(<Route element={<NavigationGuard />}>
+      <Route path="/home" element={<WorkItemDrawer><Location /></WorkItemDrawer>} />
+    </Route>), { initialEntries: ["/home?item=1"] });
+    return render(<RouterProvider router={router} />);
+  }
   return render(<MemoryRouter initialEntries={["/home?item=1"]}><WorkItemDrawer><Location /></WorkItemDrawer></MemoryRouter>);
 }
 
 beforeEach(() => { jest.resetAllMocks(); jest.spyOn(window, "confirm").mockReturnValue(false); });
 afterEach(() => { window.confirm.mockRestore(); });
+
+test("router guard gives one confirmation for X, overlay and Escape while keeping review and post drafts", async () => {
+  setup({ guarded: true });
+  await screen.findByText("Saved brief");
+  fireEvent.change(screen.getByRole("textbox", { name: /^Review note/ }), { target: { value: "Review draft" } });
+  fireEvent.click(screen.getByRole("button", { name: /Updates/ }));
+  fireEvent.change(screen.getByRole("textbox", { name: /^Post update/ }), { target: { value: "Post draft" } });
+  expect(window.confirm).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Change view" }));
+  await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("view=kanban"));
+  expect(window.confirm).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Close work item" }));
+  await waitFor(() => expect(window.confirm).toHaveBeenCalledTimes(1));
+  fireEvent.click(screen.getByRole("button", { name: "Drawer overlay" }));
+  await waitFor(() => expect(window.confirm).toHaveBeenCalledTimes(2));
+  fireEvent.keyDown(document, { key: "Escape" });
+  await waitFor(() => expect(window.confirm).toHaveBeenCalledTimes(3));
+  expect(screen.getByRole("textbox", { name: /^Review note/ })).toHaveValue("Review draft");
+  expect(screen.getByRole("textbox", { name: /^Post update/ })).toHaveValue("Post draft");
+  expect(screen.getByTestId("location")).toHaveTextContent("item=1");
+});
 
 test("core edits survive tab switches and reverting to saved values clears the close guard", async () => {
   setup();

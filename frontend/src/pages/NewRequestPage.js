@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 
 import PageContainer from "../components/layout/PageContainer";
@@ -6,9 +6,12 @@ import NewRequestForm from "../components/requests/NewRequestForm";
 import { Button } from "../components/ui/Button";
 import PageHeader from "../components/ui/PageHeader";
 import Panel from "../components/ui/Panel";
+import { pageSurvives, useDraftScope } from "../components/navigation/NavigationGuard";
 
 export default function NewRequestPage() {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const setDirty = useDraftScope("new-request-page", pageSurvives(pathname));
 
   return (
     <PageContainer className="max-w-3xl">
@@ -21,7 +24,7 @@ export default function NewRequestPage() {
         description="Send a Creative & Design request for triage."
       />
       <Panel className="p-5 sm:p-6">
-        <NewRequestForm onCreated={(request) => navigate(`/requests/${request.id}`)} />
+        <NewRequestForm onDirty={setDirty} onCreated={(request) => navigate(`/requests/${request.id}`)} />
       </Panel>
     </PageContainer>
   );

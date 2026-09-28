@@ -11,6 +11,7 @@ import WorkspaceManagerPanel from "./WorkspaceManagerPanel";
 import { workApi } from "../../api/work";
 import { awarenessApi } from "../../api/awareness";
 import NotificationsPanel from "./NotificationsPanel";
+import { drawerIdentity, drawerSurvives, useDraftScope, useNavigationGuard } from "../navigation/NavigationGuard";
 
 const WorkItemContext = createContext({ revision: 0, requestRevision: 0, workspaceRevision: 0, workspaces: [] });
 export const useWorkItemContext = () => useContext(WorkItemContext);
@@ -65,6 +66,9 @@ export default function WorkItemDrawer({ children }) {
   const [inboxRevision, setInboxRevision] = useState(0);
   const refreshInbox = useCallback(() => setInboxRevision(x => x + 1), []);
   const location = useLocation();
+  const activeDrawerIdentity = drawerIdentity(location);
+  const navigationGuard = useNavigationGuard();
+  const setDrawerScopeDirty = useDraftScope("drawer", drawerSurvives(activeDrawerIdentity));
   useEffect(() => {
     let active = true;
     setInboxLoading(true); setInboxError(false);
@@ -95,20 +99,19 @@ export default function WorkItemDrawer({ children }) {
     load();
     return () => { active = false; window.clearTimeout(retryTimer); };
   }, [workspaceRevision, workspaceRetry, location.pathname]);
-  useEffect(() => { dirty.current = false; busy.current = false; }, [itemId, requestId, drawer]);
+  useEffect(() => { dirty.current = false; busy.current = false; setDrawerScopeDirty(false); }, [activeDrawerIdentity, setDrawerScopeDirty]);
   const close = () => {
     if (busy.current) return;
-    if (dirty.current && !window.confirm("Discard unsaved changes?")) return;
+    if (!navigationGuard && dirty.current && !window.confirm("Discard unsaved changes?")) return;
     const next = new URLSearchParams(params);
     next.delete("item");
     next.delete("request");
     next.delete("drawer");
     next.delete("drawerWorkspace");
     setParams(next);
-    dirty.current = false;
   };
   const openRequest = (request) => {
-    dirty.current = false;
+    setDirty(false);
     busy.current = false;
     const next = new URLSearchParams(params);
     next.delete("item");
@@ -118,10 +121,10 @@ export default function WorkItemDrawer({ children }) {
     setRequestRevision((value) => value + 1);
     setParams(next, { replace: true });
   };
-  const setDirty = useCallback((value) => { dirty.current = value; }, []);
+  const setDirty = useCallback((value) => { dirty.current = value; setDrawerScopeDirty(value); }, [setDrawerScopeDirty]);
   const setBusy = useCallback((value) => { busy.current = value; }, []);
   const openItem = (item) => {
-    dirty.current = false;
+    setDirty(false);
     busy.current = false;
     const next = new URLSearchParams(params);
     next.delete("request");
