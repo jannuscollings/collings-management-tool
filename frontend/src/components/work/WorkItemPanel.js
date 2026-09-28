@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import { Check, ExternalLink, Loader2, Pencil, Plus, X } from "lucide-react";
@@ -37,7 +37,12 @@ function Section({ title, description, children, action }) {
 }
 function CoreEditor({ item, groups, users, busy, onSave, onCancel, onDirty }) {
   const [form, setForm] = useState({ title: item.title, brief: item.brief, group: item.group, status: item.status, priority: item.priority, owner: item.owner || '', reviewer: item.reviewer || '', due_date: item.due_date || '' });
-  const change = (key) => (event) => { setForm((current) => ({ ...current, [key]: event.target.value })); onDirty?.(true); };
+  useEffect(() => {
+    const saved = { title: item.title, brief: item.brief, group: item.group, status: item.status, priority: item.priority, owner: item.owner || '', reviewer: item.reviewer || '', due_date: item.due_date || '' };
+    onDirty?.(Object.keys(saved).some((key) => String(form[key]) !== String(saved[key])));
+    return () => onDirty?.(false);
+  }, [form, item, onDirty]);
+  const change = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
   const submit = (event) => {
     event.preventDefault();
     let payload = { title: form.title.trim(), brief: form.brief, status: form.status };
@@ -57,10 +62,14 @@ function CoreEditor({ item, groups, users, busy, onSave, onCancel, onDirty }) {
     <div className="flex justify-end gap-2 sm:col-span-2"><Button variant="secondary" disabled={busy} onClick={onCancel}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</Button></div>
   </form>;
 }
-function SubWorkRow({ sub, users, manage, userId, busy, onSave }) {
+function SubWorkRow({ sub, users, manage, userId, busy, onSave, onDraftDirty }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(sub.title);
   const [assignee, setAssignee] = useState(sub.assignee || '');
+  useEffect(() => {
+    onDraftDirty(`sub-work:${sub.id}`, editing && (title !== sub.title || String(assignee) !== String(sub.assignee || '')));
+    return () => onDraftDirty(`sub-work:${sub.id}`, false);
+  }, [editing, title, assignee, sub.id, sub.title, sub.assignee, onDraftDirty]);
   return <li className="border-t border-line py-3 first:border-0">
     {editing ? <form className="grid gap-2 sm:grid-cols-[1fr_150px_auto]" onSubmit={async (event) => { event.preventDefault(); if (await onSave({ title, assignee: assignee ? Number(assignee) : null })) setEditing(false); }}>
       <Input aria-label="Sub-work title" required maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} />
@@ -94,6 +103,18 @@ export default function WorkItemPanel({ itemId, expectedWorkspace, drawer, onCha
   const [linkUrl, setLinkUrl] = useState('');
   const [note, setNote] = useState('');
   const [retry, setRetry] = useState(0);
+  const dirtySources = useRef(new Set());
+  const markDirty = useCallback((source, value) => {
+    if (value) dirtySources.current.add(source);
+    else dirtySources.current.delete(source);
+    onDirty?.(dirtySources.current.size > 0);
+  }, [onDirty]);
+  const hasDirty = useCallback((source) => dirtySources.current.has(source), []);
+  const setCoreDirty = useCallback((value) => markDirty('core', value), [markDirty]);
+
+  useEffect(() => { markDirty('review-note', Boolean(item?.permissions.review && note.trim())); }, [item?.permissions.review, note, markDirty]);
+  useEffect(() => { markDirty('sub-work:new', Boolean(item?.permissions.manage && (subTitle.trim() || subAssignee))); }, [item?.permissions.manage, subTitle, subAssignee, markDirty]);
+  useEffect(() => { markDirty('link:new', Boolean(item?.permissions.edit && (linkLabel.trim() || linkUrl.trim()))); }, [item?.permissions.edit, linkLabel, linkUrl, markDirty]);
 
   const loadRecords = async () => {
     const [detail, discussion, history, subWork, resources] = await Promise.all([
@@ -149,23 +170,23 @@ export default function WorkItemPanel({ itemId, expectedWorkspace, drawer, onCha
     <nav aria-label="Work item sections" className="flex gap-1 border-b border-line pb-2">
       {[['overview', 'Overview'], ['updates', `Updates (${comments.length})`], ['activity', 'Activity']].map(([value, label]) => <Button key={value} variant={tab === value ? 'secondary' : 'ghost'} aria-pressed={tab === value} onClick={() => setTab(value)}>{label}</Button>)}
     </nav>
-    {tab === 'overview' && <>
+    <div hidden={tab !== 'overview'} className="space-y-5">
       <Section title="Delivery details" action={permissions.edit && !editing && <Button variant="ghost" disabled={busy} onClick={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" /> Edit</Button>}>
-        {editing ? <CoreEditor item={item} groups={groups} users={users} busy={busy} onDirty={onDirty} onCancel={() => { setEditing(false); onDirty?.(false); }} onSave={async (payload) => { if (await run(() => workApi.updateItem(itemId, payload))) { setEditing(false); onDirty?.(false); } }} /> : <>
+        {editing ? <CoreEditor item={item} groups={groups} users={users} busy={busy} onDirty={setCoreDirty} onCancel={() => setEditing(false)} onSave={async (payload) => { if (await run(() => workApi.updateItem(itemId, payload))) setEditing(false); }} /> : <>
           <p className="whitespace-pre-wrap text-[13px] leading-6 text-copy">{item.brief || 'No brief added yet.'}</p>
           <dl className="mt-5 grid gap-4 border-t border-line pt-4 sm:grid-cols-3"><div><dt className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted">Owner</dt><dd className="text-xs text-copy"><Identity person={item.owner_detail} /></dd></div><div><dt className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted">Reviewer</dt><dd className="text-xs text-copy"><Identity person={item.reviewer_detail} /></dd></div><div><dt className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted">Due date</dt><dd className="pt-1 text-xs font-semibold text-copy">{item.due_date || 'Not set'}</dd></div></dl>
         </>}
       </Section>
       <Section title="Sub-work" description={`${subs.filter((sub) => sub.completed).length} of ${subs.length} complete`}>
-        {subs.length ? <ul>{subs.map((sub) => <SubWorkRow key={sub.id} sub={sub} users={users} manage={permissions.manage} userId={user.id} busy={busy} onSave={(payload) => run(() => workApi.updateSubWork(itemId, sub.id, payload))} />)}</ul> : <p className="text-xs text-muted">Break this work into clear, assignable steps.</p>}
+        {subs.length ? <ul>{subs.map((sub) => <SubWorkRow key={sub.id} sub={sub} users={users} manage={permissions.manage} userId={user.id} busy={busy} onSave={(payload) => run(() => workApi.updateSubWork(itemId, sub.id, payload))} onDraftDirty={markDirty} />)}</ul> : <p className="text-xs text-muted">Break this work into clear, assignable steps.</p>}
         {permissions.manage && <form className="mt-4 grid gap-2 border-t border-line pt-4 sm:grid-cols-[1fr_150px_auto]" onSubmit={async (event) => { event.preventDefault(); if (await run(() => workApi.createSubWork(itemId, { title: subTitle.trim(), assignee: subAssignee ? Number(subAssignee) : null }))) { setSubTitle(''); setSubAssignee(''); } }}><Input aria-label="New sub-work title" placeholder="Add a step…" required maxLength={200} value={subTitle} onChange={(event) => setSubTitle(event.target.value)} /><Select aria-label="Assign sub-work" value={subAssignee} onChange={(event) => setSubAssignee(event.target.value)}><option value="">Unassigned</option>{users.map((person) => <option key={person.id} value={person.id}>{person.display_name}</option>)}</Select><Button type="submit" disabled={busy || !subTitle.trim()}><Plus className="h-4 w-4" /> Add</Button></form>}
       </Section>
       <Section title="Files & links" description="Design files, source briefs and delivery resources.">
         {links.length ? <ul className="space-y-2">{links.map((link) => <li key={link.id} className="flex items-center gap-3 rounded-ds-xs border border-line p-3"><ExternalLink className="h-4 w-4 shrink-0 text-muted" /><a href={link.url} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 truncate text-xs font-bold text-brand-strong">{link.label}</a>{permissions.edit && <Button variant="ghost" size="icon" aria-label={`Remove ${link.label}`} disabled={busy} onClick={() => { if (window.confirm(`Remove link “${link.label}”?`)) run(() => workApi.removeLink(itemId, link.id)); }}><X className="h-4 w-4" /></Button>}</li>)}</ul> : <p className="text-xs text-muted">No links yet. Add a resource your team can open.</p>}
         {permissions.edit && <form className="mt-4 grid gap-2 border-t border-line pt-4 sm:grid-cols-2" onSubmit={async (event) => { event.preventDefault(); if (await run(() => workApi.createLink(itemId, { label: linkLabel.trim(), url: linkUrl.trim() }))) { setLinkLabel(''); setLinkUrl(''); } }}><Input aria-label="Link label" placeholder="Label" required maxLength={160} value={linkLabel} onChange={(event) => setLinkLabel(event.target.value)} /><Input aria-label="Link URL" type="url" placeholder="https://…" required maxLength={2000} value={linkUrl} onChange={(event) => setLinkUrl(event.target.value)} /><Button type="submit" variant="secondary" disabled={busy} className="sm:col-span-2 sm:justify-self-end">Add link</Button></form>}
       </Section>
-    </>}
-    <div hidden={tab !== 'updates'}><WorkDiscussion itemId={itemId} comments={comments} users={users} busy={busy} run={run} /></div>
+    </div>
+    <div hidden={tab !== 'updates'}><WorkDiscussion itemId={itemId} comments={comments} users={users} busy={busy} run={run} onDraftDirty={markDirty} hasDirty={hasDirty} /></div>
     {tab === 'activity' && <Section title="Activity" description="Recorded changes and review decisions.">
       {activity.length ? <ol className="space-y-5 border-l border-line pl-5">{activity.map((entry) => <li key={entry.id} className="relative"><span className="absolute -left-[25px] top-1 h-2 w-2 rounded-full bg-brand" /><p className="text-xs font-bold text-copy">{activityLabels[entry.event] || entry.event}</p><p className="mt-1 text-[11px] text-muted">{entry.actor_detail.display_name} · {stamp(entry.created_at)}</p>{entry.details.note && <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-copy">{entry.details.note}</p>}{(entry.details.title || entry.details.label || entry.details.request) && <p className="mt-1 text-xs text-copy">{entry.details.title || entry.details.label || entry.details.request}</p>}{'after' in entry.details && !['brief_changed', 'title_changed'].includes(entry.event) && <p className="mt-1 text-xs text-copy">{entry.details.before || 'Unassigned'} → {entry.details.after || 'Unassigned'}</p>}</li>)}</ol> : <p className="text-xs text-muted">No recorded activity yet. Earlier work is preserved; history starts with this update.</p>}
     </Section>}

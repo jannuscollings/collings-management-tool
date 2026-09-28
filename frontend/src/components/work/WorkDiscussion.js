@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { workApi } from '../../api/work';
 import { Button } from '../ui/Button';
 import { Field, Textarea } from '../ui/Field';
@@ -8,12 +8,16 @@ import Panel from '../ui/Panel';
 const token = (user) => `@${user.email}`;
 const stamp = (value) => new Date(value).toLocaleString();
 
-function Composer({ users, initial, busy, label, onSave, onCancel }) {
+function Composer({ users, initial, busy, label, onSave, onCancel, source, onDraftDirty }) {
   const [body, setBody] = useState(initial?.body || '');
   const [selected, setSelected] = useState(initial?.mention_details || []);
   const [query, setQuery] = useState(null);
   const [index, setIndex] = useState(0);
   const input = useRef(null);
+  useEffect(() => {
+    onDraftDirty(source, initial ? body.trim() !== initial.body.trim() : Boolean(body.trim()));
+    return () => onDraftDirty(source, false);
+  }, [body, initial, source, onDraftDirty]);
   const suggestions = query ? users.filter((user) => `${user.display_name} ${user.email}`.toLowerCase().includes(query.text.toLowerCase())).slice(0, 6) : [];
   const detect = (element) => {
     const end = element.selectionStart;
@@ -58,14 +62,14 @@ function Composer({ users, initial, busy, label, onSave, onCancel }) {
   </form>;
 }
 
-function Comment({ comment, users, busy, onEdit, onDelete }) {
+function Comment({ comment, users, busy, onEdit, onDelete, onDraftDirty }) {
   const [editing, setEditing] = useState(false);
   return <div className="space-y-2">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <span className="text-xs font-bold text-copy">{comment.author_detail.display_name}</span>
       <span className="text-[10px] text-muted"><time dateTime={comment.created_at}>{stamp(comment.created_at)}</time>{comment.edited_at && ' · edited'}</span>
     </div>
-    {editing ? <Composer users={users} initial={comment} busy={busy} label="Save comment" onCancel={() => setEditing(false)} onSave={async (payload) => {
+    {editing ? <Composer users={users} initial={comment} busy={busy} label="Save comment" source={`comment:${comment.id}`} onDraftDirty={onDraftDirty} onCancel={() => setEditing(false)} onSave={async (payload) => {
       const saved = await onEdit(comment.id, payload); if (saved) setEditing(false); return saved;
     }} /> : <>
       <p className={`whitespace-pre-wrap break-words text-[13px] leading-6 ${comment.deleted_at ? 'italic text-muted' : 'text-copy'}`}>{comment.deleted_at ? 'This comment was deleted.' : comment.body}</p>
@@ -75,27 +79,28 @@ function Comment({ comment, users, busy, onEdit, onDelete }) {
   </div>;
 }
 
-export default function WorkDiscussion({ itemId, comments, users, busy, run }) {
+export default function WorkDiscussion({ itemId, comments, users, busy, run, onDraftDirty, hasDirty }) {
   const [replyTo, setReplyTo] = useState(null);
   const [expanded, setExpanded] = useState({});
   const onEdit = (id, payload) => run(() => workApi.editComment(itemId, id, payload));
   const onDelete = (id) => run(() => workApi.deleteComment(itemId, id));
+  const confirmDiscard = (sources) => !sources.some(hasDirty) || window.confirm('Discard unsaved discussion draft?');
   return <Panel className="space-y-5 p-5">
     <div><h2 className="text-sm font-extrabold text-ink">Discussion</h2><p className="mt-1 text-xs text-muted">Updates, questions and replies about this work.</p></div>
-    <Composer users={users} busy={busy} label="Post update" onSave={(payload) => run(() => workApi.createComment(itemId, payload))} />
+    <Composer users={users} busy={busy} label="Post update" source="comment:new" onDraftDirty={onDraftDirty} onSave={(payload) => run(() => workApi.createComment(itemId, payload))} />
     {!comments.length && <p className="border-t border-line pt-5 text-xs text-muted">No updates yet. Start the conversation.</p>}
     {comments.filter((comment) => !comment.parent).map((comment) => {
       const replies = comments.filter((reply) => reply.parent === comment.id);
       const open = expanded[comment.id] || replyTo === comment.id;
       return <section key={comment.id} className="space-y-3 border-t border-line pt-5">
-        <Comment {...{ comment, users, busy, onEdit, onDelete }} />
+        <Comment {...{ comment, users, busy, onEdit, onDelete, onDraftDirty }} />
         <div className="flex gap-3 text-[11px] font-bold text-brand-strong">
-          {replies.length > 0 && <button aria-expanded={Boolean(open)} onClick={() => { setExpanded((current) => ({ ...current, [comment.id]: !open })); setReplyTo(null); }}>{open ? 'Hide' : 'Show'} {replies.length} {replies.length === 1 ? 'reply' : 'replies'}</button>}
-          {!comment.deleted_at && <button disabled={busy} onClick={() => setReplyTo(comment.id)}>Reply</button>}
+          {replies.length > 0 && <button disabled={busy} aria-expanded={Boolean(open)} onClick={() => { if (!confirmDiscard([`reply:${replyTo}`, ...(open ? replies.map((reply) => `comment:${reply.id}`) : [])])) return; setExpanded((current) => ({ ...current, [comment.id]: !open })); setReplyTo(null); }}>{open ? 'Hide' : 'Show'} {replies.length} {replies.length === 1 ? 'reply' : 'replies'}</button>}
+          {!comment.deleted_at && <button disabled={busy} onClick={() => { if (replyTo !== comment.id && !confirmDiscard([`reply:${replyTo}`])) return; setReplyTo(comment.id); }}>Reply</button>}
         </div>
         {open && <div className="ml-2 space-y-5 border-l-2 border-line pl-4 sm:ml-4">
-          {replies.map((reply) => <Comment key={reply.id} comment={reply} {...{ users, busy, onEdit, onDelete }} />)}
-          {replyTo === comment.id && !comment.deleted_at && <Composer users={users} busy={busy} label="Post reply" onCancel={() => setReplyTo(null)} onSave={async (payload) => {
+          {replies.map((reply) => <Comment key={reply.id} comment={reply} {...{ users, busy, onEdit, onDelete, onDraftDirty }} />)}
+          {replyTo === comment.id && !comment.deleted_at && <Composer users={users} busy={busy} label="Post reply" source={`reply:${comment.id}`} onDraftDirty={onDraftDirty} onCancel={() => setReplyTo(null)} onSave={async (payload) => {
             const saved = await run(() => workApi.createComment(itemId, { ...payload, parent: comment.id }));
             if (saved) { setReplyTo(null); setExpanded((current) => ({ ...current, [comment.id]: true })); } return saved;
           }} />}
