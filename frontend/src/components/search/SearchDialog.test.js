@@ -67,7 +67,7 @@ afterEach(() => { window.confirm.mockRestore(); jest.clearAllMocks(); });
 test("click and shortcut open Search without removing a dirty editor; Escape returns focus", async () => {
   setup();
   fireEvent.change(screen.getByRole("textbox", { name: "Editor draft" }), { target: { value: "Keep this" } });
-  const trigger = screen.getByRole("button", { name: "Search work, requests, and spaces" });
+  const trigger = screen.getAllByRole("button", { name: "Search work, requests, and spaces" })[0];
   fireEvent.click(trigger);
   expect(screen.getByRole("searchbox", { name: "Search work, requests, and spaces" })).toHaveFocus();
   expect(screen.getByRole("textbox", { name: "Editor draft" })).toHaveValue("Keep this");
@@ -82,7 +82,7 @@ test("click and shortcut open Search without removing a dirty editor; Escape ret
 test("cancelled guard keeps query and results; discard navigates once", async () => {
   setup();
   fireEvent.change(screen.getByRole("textbox", { name: "Editor draft" }), { target: { value: "Draft" } });
-  fireEvent.click(screen.getByRole("button", { name: "Search work, requests, and spaces" }));
+  fireEvent.click(screen.getAllByRole("button", { name: "Search work, requests, and spaces" })[0]);
   fireEvent.change(screen.getByRole("searchbox"), { target: { value: "homepage" } });
   await screen.findByRole("button", { name: /Work Item WI-000002 Homepage follow-up/ });
   fireEvent.keyDown(screen.getByRole("searchbox"), { key: "ArrowDown" });
@@ -102,7 +102,7 @@ test("stale response cannot replace results for a newer query; category and empt
   let resolveOld;
   searchApi.search.mockImplementation((query) => query === "old" ? new Promise((resolve) => { resolveOld = resolve; }) : Promise.resolve(response(result(3, "New result"))));
   setup("/home");
-  fireEvent.click(screen.getByRole("button", { name: "Search work, requests, and spaces" }));
+  fireEvent.click(screen.getAllByRole("button", { name: "Search work, requests, and spaces" })[0]);
   const input = screen.getByRole("searchbox");
   fireEvent.change(input, { target: { value: "old" } });
   await waitFor(() => expect(searchApi.search).toHaveBeenCalledWith("old", expect.anything()));
@@ -119,7 +119,7 @@ test("below-minimum query skips the API, retry recovers an error, and board open
     workItems: [], requests: [], workspaces: [], boards: [{ id: 9, name: "Website", workspaceName: "Creative", workspaceSlug: "creative" }],
   } } });
   setup("/home");
-  fireEvent.click(screen.getByRole("button", { name: "Search work, requests, and spaces" }));
+  fireEvent.click(screen.getAllByRole("button", { name: "Search work, requests, and spaces" })[0]);
   fireEvent.change(screen.getByRole("searchbox"), { target: { value: "w" } });
   expect(screen.getByText(/Enter at least 2 characters/)).toBeInTheDocument();
   expect(searchApi.search).not.toHaveBeenCalled();
