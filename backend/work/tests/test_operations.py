@@ -30,10 +30,16 @@ class OperationsTests(TestCase):
         self.assertEqual(client.get('/api/work-items/').data, [])
         data = client.get('/api/workspaces/creative-design/').data
         self.assertFalse(any(g['work_items'] for g in data['groups']))
-        SubWork.objects.create(work_item=self.item, title='Copy', assignee=self.other, created_by=self.admin)
+        assignment = SubWork.objects.create(work_item=self.item, title='Copy', assignee=self.other, created_by=self.admin)
         self.assertEqual(client.get(self.url).status_code, 200)
         self.assertEqual(len(client.get('/api/work-items/').data), 1)
-        # My Work retains its owner OR reviewer contract.
+        self.assertEqual([item['id'] for item in client.get('/api/work-items/?relevance=mine').data], [self.item.pk])
+        SubWork.objects.create(work_item=self.item, title='Proof', assignee=self.other, created_by=self.admin)
+        self.assertEqual([item['id'] for item in client.get('/api/work-items/?relevance=mine').data], [self.item.pk])
+        assignment.assignee = None
+        assignment.save(update_fields=['assignee'])
+        self.assertEqual([item['id'] for item in client.get('/api/work-items/?relevance=mine').data], [self.item.pk])
+        self.item.sub_work.update(assignee=None)
         self.assertEqual(client.get('/api/work-items/?relevance=mine').data, [])
 
     def test_admin_creation_and_user_field_restrictions(self):

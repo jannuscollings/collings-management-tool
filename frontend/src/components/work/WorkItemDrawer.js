@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { useSelector } from "react-redux";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import NewRequestForm from "../requests/NewRequestForm";
@@ -46,6 +47,7 @@ export function DrawerLink({ drawer, drawerParams = {}, children, ...props }) {
 }
 
 export default function WorkItemDrawer({ children }) {
+  const isAdmin = useSelector((state) => state.auth.user?.is_staff);
   const [params, setParams] = useSearchParams();
   const itemId = params.get("item");
   const requestId = params.get("request");
@@ -135,7 +137,10 @@ export default function WorkItemDrawer({ children }) {
     notifications: ["Notifications", "Updates that need your attention"],
     workspaces: ["Manage workspaces", "Create, rename, order and archive workspaces"],
   };
-  const [title, description] = itemId
+  const adminDrawerBlocked = !isAdmin && !itemId && !requestId && (drawer === "new-work-item" || drawer === "workspaces");
+  const [title, description] = adminDrawerBlocked
+    ? ["Unavailable", "This action is available to administrators"]
+    : itemId
     ? ["Work item", "Delivery details, collaboration and review"]
     : requestId
       ? ["Request", "Submitted details, triage and delivery outcome"]
@@ -159,6 +164,7 @@ export default function WorkItemDrawer({ children }) {
               <Dialog.Close className="rounded-ds-xs p-2 text-muted hover:bg-canvas focus-visible:ring-2 focus-visible:ring-brand" aria-label={`Close ${title.toLowerCase()}`}><X className="h-5 w-5" /></Dialog.Close>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+              {adminDrawerBlocked && <p role="status" className="text-sm text-muted">This action is available to administrators.</p>}
               {itemId && <WorkItemPanel key={itemId} itemId={itemId}
                 onChanged={() => setRevision((value) => value + 1)}
                 onDirty={setDirty}
@@ -167,7 +173,7 @@ export default function WorkItemDrawer({ children }) {
                 onChanged={() => setRequestRevision((value) => value + 1)}
                 onDirty={setDirty}
                 onBusy={setBusy} drawer />}
-              {!itemId && !requestId && drawer === "new-work-item" && drawerWorkspace && (
+              {!itemId && !requestId && isAdmin && drawer === "new-work-item" && drawerWorkspace && (
                 <NewWorkItemForm workspaceSlug={drawerWorkspace} onCreated={openItem} onDirty={setDirty} onBusy={setBusy} />
               )}
               {!itemId && !requestId && drawer === "new-request" && (
@@ -180,7 +186,7 @@ export default function WorkItemDrawer({ children }) {
               {!itemId && !requestId && drawer === "notifications" && (
                 <NotificationsPanel inbox={inbox} loading={inboxLoading} error={inboxError} refresh={refreshInbox} />
               )}
-              {!itemId && !requestId && drawer === "workspaces" && (
+              {!itemId && !requestId && isAdmin && drawer === "workspaces" && (
                 <WorkspaceManagerPanel
                   onChanged={() => setWorkspaceRevision((value) => value + 1)}
                   onDirty={setDirty}

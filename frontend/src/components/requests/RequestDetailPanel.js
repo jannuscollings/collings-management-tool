@@ -15,6 +15,13 @@ import Panel from "../ui/Panel";
 const STATUS_VARIANTS = { new: "info", triaging: "warning", accepted: "brand", rejected: "danger" };
 const PRIORITY_VARIANTS = { high: "warning", medium: "neutral", low: "neutral" };
 const noop = () => {};
+const TRIAGE_FIELDS = ["destination_group", "triage_priority", "triage_due_date", "owner", "reviewer"];
+const savedTriage = (request) => Object.fromEntries(
+  TRIAGE_FIELDS.map((field) => [field, String(request[field] ?? "")]),
+);
+const triageDiffers = (triage, request) => TRIAGE_FIELDS.some(
+  (field) => triage[field] !== String(request[field] ?? ""),
+);
 
 export default function RequestDetailPanel({ requestId, drawer = false, onChanged = noop, onDirty = noop, onBusy = noop }) {
   const location = useLocation();
@@ -41,13 +48,7 @@ export default function RequestDetailPanel({ requestId, drawer = false, onChange
         setRequest(data);
         setGroups(destinations);
         setUsers(usersResponse.data);
-        setTriage({
-          destination_group: String(data.destination_group || destinations[0]?.id || ""),
-          triage_priority: data.triage_priority || "",
-          triage_due_date: data.triage_due_date || "",
-          owner: data.owner ? String(data.owner) : "",
-          reviewer: data.reviewer ? String(data.reviewer) : "",
-        });
+        setTriage({ ...savedTriage(data), destination_group: String(data.destination_group || destinations[0]?.id || "") });
         onDirty(false);
       })
       .catch(() => toast.error("Couldn't load the request"))
@@ -58,9 +59,12 @@ export default function RequestDetailPanel({ requestId, drawer = false, onChange
   useEffect(() => { onBusy(saving); }, [saving, onBusy]);
 
   const updateTriage = (field) => (event) => {
-    setTriage((current) => ({ ...current, [field]: event.target.value }));
-    onDirty(true);
+    const next = { ...triage, [field]: event.target.value };
+    setTriage(next);
+    onDirty(triageDiffers(next, request));
   };
+
+  const hasUnsavedTriage = Boolean(request && triage && triageDiffers(triage, request));
 
   const saveTriage = async (event) => {
     event.preventDefault();
@@ -74,6 +78,7 @@ export default function RequestDetailPanel({ requestId, drawer = false, onChange
         reviewer: triage.reviewer ? Number(triage.reviewer) : null,
       });
       setRequest(data);
+      setTriage(savedTriage(data));
       onDirty(false);
       onChanged();
       toast.success("Triage saved");
@@ -83,6 +88,7 @@ export default function RequestDetailPanel({ requestId, drawer = false, onChange
   };
 
   const accept = async () => {
+    if (saving || request.status !== "triaging" || hasUnsavedTriage) return;
     setSaving(true);
     try {
       const { data } = await workRequestsApi.accept(requestId);
@@ -146,8 +152,9 @@ export default function RequestDetailPanel({ requestId, drawer = false, onChange
         <Field label="Due-date override" hint={request.requested_due_date ? `Requested date: ${request.requested_due_date}` : "No date requested"}><Input type="date" value={triage.triage_due_date} onChange={updateTriage("triage_due_date")} /></Field>
         <Field label="Owner"><Select value={triage.owner} onChange={updateTriage("owner")}><option value="">Unassigned</option>{users.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</Select></Field>
         <Field label="Reviewer"><Select value={triage.reviewer} onChange={updateTriage("reviewer")}><option value="">Unassigned</option>{users.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</Select></Field>
-        <div className="flex flex-wrap gap-2 sm:col-span-2"><Button type="submit" variant="secondary" disabled={saving}>{saving ? "Saving…" : "Save triage"}</Button><Button type="button" variant="dark" onClick={accept} disabled={saving || request.status !== "triaging"}>Accept request</Button><Button type="button" variant="danger" onClick={reject} disabled={saving}>Reject request</Button></div>
+        <div className="flex flex-wrap gap-2 sm:col-span-2"><Button type="submit" variant="secondary" disabled={saving}>{saving ? "Saving…" : "Save triage"}</Button><Button type="button" variant="dark" onClick={accept} disabled={saving || request.status !== "triaging" || hasUnsavedTriage}>Accept request</Button><Button type="button" variant="danger" onClick={reject} disabled={saving}>Reject request</Button></div>
         {request.status === "new" && <p className="text-xs text-muted sm:col-span-2">Save triage before accepting the request.</p>}
+        {request.status === "triaging" && hasUnsavedTriage && <p role="status" className="text-xs text-muted sm:col-span-2">Save triage before accepting the request.</p>}
       </form>
     </Panel>}
     {request.status === "rejected" && <Panel className="border-critical/25 bg-red-50/60 p-5 text-sm dark:bg-red-950/20 sm:p-6"><h2 className="font-extrabold text-ink">Request rejected</h2><p className="mt-1 text-copy">This request is closed and cannot be edited or accepted.</p></Panel>}

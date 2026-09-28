@@ -210,7 +210,10 @@ class WorkItemViewSet(
             queryset = queryset.filter(
                 group__archived=False,
                 group__workspace__archived=False,
-            ).filter(Q(owner=self.request.user) | Q(reviewer=self.request.user))
+            ).filter(
+                Q(owner=self.request.user) | Q(reviewer=self.request.user)
+                | Q(sub_work__assignee=self.request.user)
+            ).distinct()
 
         workspace = params.get("workspace")
         if workspace:

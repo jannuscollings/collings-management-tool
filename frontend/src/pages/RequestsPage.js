@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSelector } from "react-redux";
 import toast from "react-hot-toast";
 import { Plus } from "lucide-react";
 
@@ -20,6 +21,7 @@ const STATUS_VARIANTS = {
 const PRIORITY_VARIANTS = { high: "warning", medium: "neutral", low: "neutral" };
 
 export default function RequestsPage() {
+  const isAdmin = useSelector((state) => state.auth.user?.is_staff);
   const { requestRevision } = useWorkItemContext();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -43,7 +45,7 @@ export default function RequestsPage() {
       <PageHeader
         eyebrow="Manage"
         title="Requests"
-        description="Review incoming work and route it into a workspace."
+        description={isAdmin ? "Review incoming work and route it into a workspace." : "Track the requests you've submitted."}
         actions={
           <Button asChild>
             <DrawerLink drawer="new-request"><Plus className="h-4 w-4" /> Request internal</DrawerLink>

@@ -34,7 +34,7 @@ function Composer({ users, initial, busy, label, onSave, onCancel }) {
     const mentions = selected.filter((person) => body.includes(token(person))).map((person) => person.id);
     if (await onSave({ body: body.trim(), mentions })) { setBody(''); setSelected([]); setQuery(null); }
   }}>
-    <Field label={label} hint="Type @ to mention an active user. Mentions do not send notifications.">
+    <Field label={label} hint="Type @ to mention an active user. Mentions send notifications.">
       <Textarea ref={input} required rows={3} maxLength={10000} disabled={busy} value={body}
         onChange={(event) => { setBody(event.target.value); detect(event.target); }}
         onClick={(event) => detect(event.target)}

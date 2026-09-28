@@ -107,7 +107,7 @@ export default function MyWorkPage() {
       <PageHeader
         eyebrow="Work"
         title="My Work"
-        description="Work items you own or are reviewing across workspaces."
+        description="Work items you own, review or have assigned sub-work on across workspaces."
       />
 
       <Panel className="mb-5 p-4">
@@ -185,7 +185,7 @@ export default function MyWorkPage() {
                       ? "Your work items couldn't be loaded."
                       : hasActiveFilters
                         ? "No work items match the current filters."
-                        : "No work items are currently assigned to you for ownership or review."}
+                        : "No work items are currently assigned to you for ownership, review or sub-work."}
                   </td>
                 </tr>
               ) : workItems.map((item) => {
@@ -207,6 +207,7 @@ export default function MyWorkPage() {
                       <div className="flex flex-wrap gap-1.5">
                         {isOwner && <Badge variant="info">Owner</Badge>}
                         {isReviewer && <Badge variant="review">Reviewer</Badge>}
+                        {!isOwner && !isReviewer && <Badge variant="neutral">Sub-work</Badge>}
                       </div>
                     </td>
                     <td className="px-[13px] py-3">
