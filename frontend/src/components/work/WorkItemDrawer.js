@@ -160,14 +160,14 @@ export default function WorkItemDrawer({ children }) {
             onCloseAutoFocus={(event) => { event.preventDefault(); opener.current?.focus(); }}
             className="fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-line bg-canvas font-product text-ink shadow-overlay focus:outline-none sm:max-w-[820px]"
           >
-            <div className="flex shrink-0 items-center justify-between border-b border-line bg-surface px-5 py-3">
-              <div>
+            <div className={itemId ? "flex shrink-0 items-center justify-between gap-2 border-b border-line bg-surface px-4 py-2 shell:px-5 shell:py-3" : "flex shrink-0 items-center justify-between border-b border-line bg-surface px-5 py-3"}>
+              <div className={itemId ? "min-w-0" : undefined}>
                 <Dialog.Title className="text-sm font-extrabold">{title}</Dialog.Title>
-                <Dialog.Description className="text-xs text-muted">{description}</Dialog.Description>
+                <Dialog.Description className={itemId ? "break-words text-xs text-muted" : "text-xs text-muted"}>{description}</Dialog.Description>
               </div>
-              <Dialog.Close className="rounded-ds-xs p-2 text-muted hover:bg-canvas focus-visible:ring-2 focus-visible:ring-brand" aria-label={`Close ${title.toLowerCase()}`}><X className="h-5 w-5" /></Dialog.Close>
+              <Dialog.Close className={itemId ? "grid min-h-11 min-w-11 shrink-0 place-items-center rounded-ds-xs text-muted hover:bg-canvas focus-visible:ring-2 focus-visible:ring-brand shell:min-h-0 shell:min-w-0 shell:p-2" : "rounded-ds-xs p-2 text-muted hover:bg-canvas focus-visible:ring-2 focus-visible:ring-brand"} aria-label={`Close ${title.toLowerCase()}`}><X className="h-5 w-5" /></Dialog.Close>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+            <div className={itemId ? "min-h-0 min-w-0 flex-1 overflow-y-auto p-4 pb-16 sm:p-6 sm:pb-16 shell:pb-6" : "min-h-0 flex-1 overflow-y-auto p-4 sm:p-6"}>
               {adminDrawerBlocked && <p role="status" className="text-sm text-muted">This action is available to administrators.</p>}
               {itemId && <WorkItemPanel key={itemId} itemId={itemId}
                 onChanged={() => setRevision((value) => value + 1)}

@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import AppShell from "../layout/AppShell";
 import WorkItemDrawer from "./WorkItemDrawer";
@@ -13,10 +13,10 @@ jest.mock("../../api/awareness", () => ({ awarenessApi: { notifications: jest.fn
 jest.mock("../layout/AccountMenu", () => () => null);
 jest.mock("../layout/NotificationLink", () => () => null);
 jest.mock("@radix-ui/react-dialog", () => ({
-  Root: ({ children }) => <>{children}</>,
+  Root: ({ children, open }) => open ? <>{children}</> : null,
   Portal: ({ children }) => <>{children}</>,
   Overlay: () => null,
-  Content: ({ children }) => <div>{children}</div>,
+  Content: ({ children }) => <div role="dialog">{children}</div>,
   Title: ({ children }) => <div>{children}</div>,
   Description: ({ children }) => <div>{children}</div>,
   Close: ({ children }) => <div>{children}</div>,
@@ -41,14 +41,19 @@ test("a transient workspace load failure does not leave navigation empty", async
 
   render(<MemoryRouter initialEntries={["/home"]}><AppShell /></MemoryRouter>);
 
-  await waitFor(() => expect(screen.getAllByRole("link", { name: "Property Agents" })).toHaveLength(2), { timeout: 2500 });
+  await waitFor(() => expect(screen.getByRole("link", { name: "Property Agents" })).toBeInTheDocument(), { timeout: 2500 });
   expect(workApi.listWorkspaces).toHaveBeenCalledTimes(2);
-  for (const name of ["Primary navigation", "Mobile navigation"]) {
-    const nav = within(screen.getByRole("navigation", { name }));
-    expect(nav.getAllByRole("link").filter((link) => link.getAttribute("href").startsWith("/workspaces/")).map((link) => link.textContent))
-      .toEqual(["Property Agents", "Creative & Design"]);
-    expect(nav.getByRole("link", { name: /manage workspaces/i })).not.toBeNull();
-  }
+  const desktopNav = within(screen.getByRole("navigation", { name: "Primary navigation" }));
+  expect(desktopNav.getAllByRole("link").filter((link) => link.getAttribute("href").startsWith("/workspaces/")).map((link) => link.textContent))
+    .toEqual(["Property Agents", "Creative & Design"]);
+  expect(desktopNav.getByRole("link", { name: /manage workspaces/i })).not.toBeNull();
+  const mobileNav = within(screen.getByRole("navigation", { name: "Mobile primary navigation" }));
+  expect(mobileNav.getByRole("button", { name: "More" })).toBeInTheDocument();
+  fireEvent.click(mobileNav.getByRole("button", { name: "More" }));
+  const more = within(screen.getByRole("dialog"));
+  expect(more.getAllByRole("link").filter((link) => link.getAttribute("href").startsWith("/workspaces/")).map((link) => link.textContent))
+    .toEqual(["Property Agents", "Creative & Design"]);
+  expect(more.getByRole("link", { name: /manage workspaces/i })).not.toBeNull();
 });
 
 test.each([

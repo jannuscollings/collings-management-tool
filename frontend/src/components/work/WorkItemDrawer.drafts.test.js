@@ -7,7 +7,8 @@ import { workApi } from "../../api/work";
 import { awarenessApi } from "../../api/awareness";
 
 let mockCloseDrawer;
-jest.mock("react-redux", () => ({ useSelector: (selector) => selector({ auth: { user: { id: 1, is_staff: true } } }) }));
+let mockUser = { id: 1, is_staff: true };
+jest.mock("react-redux", () => ({ useSelector: (selector) => selector({ auth: { user: mockUser } }) }));
 jest.mock("../../api/work", () => ({
   WORK_STATUS_OPTIONS: [["new", "New"], ["in_progress", "In progress"], ["review", "Review"], ["done", "Done"]],
   WORK_PRIORITY_OPTIONS: [["low", "Low"], ["medium", "Medium"], ["high", "High"]],
@@ -32,7 +33,7 @@ jest.mock("@radix-ui/react-dialog", () => ({
   },
   Portal: ({ children }) => <>{children}</>,
   Overlay: () => <button aria-label="Drawer overlay" onClick={() => mockCloseDrawer()} />,
-  Content: ({ children }) => <div>{children}</div>,
+  Content: ({ children, className, id }) => <div className={className} id={id}>{children}</div>,
   Title: ({ children }) => <div>{children}</div>,
   Description: ({ children }) => <div>{children}</div>,
   Close: ({ children, ...props }) => <button {...props} onClick={() => mockCloseDrawer()}>{children}</button>,
@@ -65,14 +66,14 @@ function Location() {
   }}>Change view</button></>;
 }
 
-function setup({ comments = [], subs = [], guarded = false } = {}) {
+function setup({ comments = [], subs = [], links = [], detail = item, guarded = false } = {}) {
   workApi.listWorkspaces.mockResolvedValue({ data: [] });
   awarenessApi.notifications.mockResolvedValue({ data: { items: [], unread_count: 0, next_before: null } });
-  workApi.getItem.mockResolvedValue({ data: item });
+  workApi.getItem.mockResolvedValue({ data: detail });
   workApi.listComments.mockResolvedValue({ data: comments });
   workApi.listActivity.mockResolvedValue({ data: [] });
   workApi.listSubWork.mockResolvedValue({ data: subs });
-  workApi.listLinks.mockResolvedValue({ data: [] });
+  workApi.listLinks.mockResolvedValue({ data: links });
   workApi.getWorkspace.mockResolvedValue({ data: { groups: [{ id: 1, name: "Production" }] } });
   workApi.listUsers.mockResolvedValue({ data: [{ id: 1, display_name: "Owner" }, { id: 2, display_name: "Other" }] });
   if (guarded) {
@@ -84,7 +85,7 @@ function setup({ comments = [], subs = [], guarded = false } = {}) {
   return render(<MemoryRouter initialEntries={["/home?item=1"]}><WorkItemDrawer><Location /></WorkItemDrawer></MemoryRouter>);
 }
 
-beforeEach(() => { jest.resetAllMocks(); jest.spyOn(window, "confirm").mockReturnValue(false); });
+beforeEach(() => { jest.resetAllMocks(); mockUser = { id: 1, is_staff: true }; jest.spyOn(window, "confirm").mockReturnValue(false); });
 afterEach(() => { window.confirm.mockRestore(); });
 
 test("router guard gives one confirmation for X, overlay and Escape while keeping review and post drafts", async () => {
@@ -244,4 +245,36 @@ test("sub-work edits survive tabs and failed creation retains the remaining draf
   await waitFor(() => expect(screen.getByRole("button", { name: "Add" })).toBeEnabled());
   fireEvent.click(screen.getByRole("button", { name: "Close work item" }));
   expect(window.confirm).toHaveBeenCalledTimes(1);
+});
+
+test("shared Work Item layout keeps long content, tabs, and final actions usable on mobile", async () => {
+  const longText = "UnbrokenWorkItemContent".repeat(8);
+  setup({ detail: { ...item, title: longText, brief: longText }, comments: [comment(4, longText)],
+    links: [{ id: 5, label: `https://example.com/${longText}`, url: "https://example.com/file" }] });
+  const title = await screen.findByRole("heading", { name: longText });
+  expect(title).toHaveClass("break-words");
+  const details = screen.getByRole("heading", { name: "Delivery details" }).parentElement.parentElement.parentElement;
+  expect(within(details).getByText(longText)).toHaveClass("break-words");
+  expect(screen.getByRole("navigation", { name: "Work item sections" })).toHaveClass("overflow-x-auto", "shell:overflow-visible");
+  const scrollArea = document.querySelector("#cmt-drawer-content > div:last-child");
+  expect(scrollArea).toHaveClass("overflow-y-auto", "pb-16", "shell:pb-6");
+  expect(screen.getByRole("link", { name: /https:\/\/example.com/ })).toHaveClass("break-all", "shell:truncate");
+  expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Add" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /Updates/ }));
+  const discussion = screen.getByRole("heading", { name: "Discussion" }).parentElement.parentElement;
+  expect(within(discussion).getByText(longText)).toHaveClass("break-all", "shell:break-words");
+  expect(screen.getByRole("button", { name: "Reply" })).toHaveClass("min-h-11");
+});
+
+test("Staff keeps discussion access without Admin and reviewer controls", async () => {
+  mockUser = { id: 2, is_staff: false };
+  setup({ detail: { ...item, permissions: { edit: false, manage: false, review: false, statuses: ["review"] } } });
+  await screen.findByText("Saved brief");
+  expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Add" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("textbox", { name: /^Review note/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /Updates/ }));
+  expect(screen.getByRole("textbox", { name: /^Post update/ })).toBeInTheDocument();
 });

@@ -35,6 +35,9 @@ test.each([
   ["/requests/new", "New request draft", "Requests", "/requests"],
 ])("full-page editor at %s protects its draft", async (start, field, link, destination) => {
   setup(start);
+  if (field === "Work item draft") {
+    expect(screen.getByRole("textbox", { name: field }).closest("[class*='pb-16']")).toHaveClass("pb-16", "shell:pb-[34px]");
+  }
   fireEvent.change(screen.getByRole("textbox", { name: field }), { target: { value: "Unsent" } });
   fireEvent.click(screen.getByRole("link", { name: link }));
   await waitFor(() => expect(window.confirm).toHaveBeenCalledTimes(1));
