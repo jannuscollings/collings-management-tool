@@ -12,6 +12,7 @@ import { Button } from "../components/ui/Button";
 import { Field, Input, Select } from "../components/ui/Field";
 import PageHeader from "../components/ui/PageHeader";
 import Panel from "../components/ui/Panel";
+import DueDate from "../components/work/DueDate";
 
 const PRIORITY_VARIANTS = {
   low: "neutral",
@@ -33,6 +34,16 @@ const STATUS_VARIANTS = {
   done: "success",
 };
 
+function Relevance({ item, userId }) {
+  const isOwner = item.owner === userId;
+  const isReviewer = item.reviewer === userId;
+  return <div className="flex flex-wrap gap-1.5">
+    {isOwner && <Badge variant="info">Owner</Badge>}
+    {isReviewer && <Badge variant="review">Reviewer</Badge>}
+    {!isOwner && !isReviewer && <Badge variant="neutral">Sub-work</Badge>}
+  </div>;
+}
+
 export default function MyWorkPage() {
   const { revision } = useWorkItemContext();
   const user = useSelector((state) => state.auth.user);
@@ -40,12 +51,15 @@ export default function MyWorkPage() {
   const [workItems, setWorkItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   const querySearch = searchParams.get("q") || "";
   const statusFilter = searchParams.get("status") || "";
   const priorityFilter = searchParams.get("priority") || "";
+  const dueFilter = searchParams.get("due") || "";
   const [searchInput, setSearchInput] = useState(querySearch);
-  const hasActiveFilters = Boolean(querySearch || statusFilter || priorityFilter);
+  const hasActiveFilters = Boolean(querySearch || statusFilter || priorityFilter || dueFilter);
+  const secondaryFilterCount = Number(Boolean(statusFilter)) + Number(Boolean(priorityFilter)) + Number(Boolean(dueFilter));
 
   useEffect(() => {
     let active = true;
@@ -56,6 +70,7 @@ export default function MyWorkPage() {
       ...(querySearch && { q: querySearch }),
       ...(statusFilter && { status: statusFilter }),
       ...(priorityFilter && { priority: priorityFilter }),
+      ...(dueFilter && { due: dueFilter, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
     })
       .then(({ data }) => {
         if (active) setWorkItems(data);
@@ -72,7 +87,7 @@ export default function MyWorkPage() {
     return () => {
       active = false;
     };
-  }, [querySearch, statusFilter, priorityFilter, revision]);
+  }, [querySearch, statusFilter, priorityFilter, dueFilter, revision]);
 
   useEffect(() => {
     setSearchInput(querySearch);
@@ -103,7 +118,7 @@ export default function MyWorkPage() {
   };
 
   return (
-    <PageContainer>
+    <PageContainer className="pb-16 shell:pb-[34px]">
       <PageHeader
         eyebrow="Work"
         title="My Work"
@@ -111,7 +126,7 @@ export default function MyWorkPage() {
       />
 
       <Panel className="mb-5 p-4">
-        <div className="grid gap-3 sm:grid-cols-2 shell:grid-cols-[minmax(260px,2fr)_repeat(2,minmax(160px,1fr))_auto] shell:items-end">
+        <div className="grid gap-3 shell:grid-cols-[minmax(260px,2fr)_repeat(3,minmax(140px,1fr))_auto] shell:items-end">
           <Field label="Search">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
@@ -124,6 +139,10 @@ export default function MyWorkPage() {
               />
             </div>
           </Field>
+          <Button variant="secondary" className="min-h-11 justify-self-start shell:hidden" aria-expanded={mobileFiltersOpen} aria-controls="my-work-mobile-filters" onClick={() => setMobileFiltersOpen((open) => !open)}>
+            Filters{secondaryFilterCount ? ` (${secondaryFilterCount})` : ""}
+          </Button>
+          <div id="my-work-mobile-filters" className={`${mobileFiltersOpen ? "grid" : "hidden"} grid-cols-2 gap-2 shell:contents`}>
           <Field label="Status">
             <Select value={statusFilter} onChange={updateFilter("status")}>
               <option value="">All statuses</option>
@@ -140,15 +159,24 @@ export default function MyWorkPage() {
               ))}
             </Select>
           </Field>
+          <Field label="Due">
+            <Select value={dueFilter} onChange={updateFilter("due")}>
+              <option value="">Any due date</option>
+              <option value="overdue">Overdue</option>
+              <option value="today">Due today</option>
+              <option value="soon">Due soon</option>
+            </Select>
+          </Field>
           <Button
             variant="ghost"
             onClick={clearFilters}
             disabled={!hasActiveFilters}
-            className="sm:self-end"
+            className="col-span-2 min-h-11 justify-self-start shell:col-auto shell:min-h-[38px] shell:self-end"
           >
             <X className="h-4 w-4" />
             Clear
           </Button>
+          </div>
         </div>
         {loading && <p className="mt-2 text-[10.5px] text-muted">Updating work items…</p>}
       </Panel>
@@ -158,7 +186,7 @@ export default function MyWorkPage() {
           <h2 className="text-[13px] font-extrabold tracking-[0.02em] text-ink">Relevant work items</h2>
           <Badge variant="neutral">{workItems.length} {workItems.length === 1 ? "item" : "items"}</Badge>
         </div>
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto shell:block">
           <table className="w-full min-w-[980px] border-collapse text-left">
             <thead className="bg-canvas/35">
               <tr className="border-b border-line">
@@ -189,8 +217,6 @@ export default function MyWorkPage() {
                   </td>
                 </tr>
               ) : workItems.map((item) => {
-                const isOwner = item.owner === user?.id;
-                const isReviewer = item.reviewer === user?.id;
                 return (
                   <tr key={item.id} className="text-[11.5px] text-copy transition-colors hover:bg-brand-soft/35">
                     <td className="px-[13px] py-3 font-mono text-[10.5px] font-semibold text-muted">
@@ -204,11 +230,7 @@ export default function MyWorkPage() {
                       <span className="mt-0.5 block text-[10.5px] text-muted">{item.group_name}</span>
                     </td>
                     <td className="px-[13px] py-3">
-                      <div className="flex flex-wrap gap-1.5">
-                        {isOwner && <Badge variant="info">Owner</Badge>}
-                        {isReviewer && <Badge variant="review">Reviewer</Badge>}
-                        {!isOwner && !isReviewer && <Badge variant="neutral">Sub-work</Badge>}
-                      </div>
+                      <Relevance item={item} userId={user?.id} />
                     </td>
                     <td className="px-[13px] py-3">
                       <Badge variant={STATUS_VARIANTS[item.status]}>{STATUS_LABELS[item.status]}</Badge>
@@ -216,12 +238,28 @@ export default function MyWorkPage() {
                     <td className="px-[13px] py-3">
                       <Badge variant={PRIORITY_VARIANTS[item.priority]} className="capitalize">{item.priority}</Badge>
                     </td>
-                    <td className="px-[13px] py-3">{item.due_date || "—"}</td>
+                    <td className="px-[13px] py-3"><DueDate item={item} /></td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
+        </div>
+        <div className="divide-y divide-line/70 shell:hidden" aria-label="My Work mobile items">
+          {!loading && workItems.length === 0 ? <p className="px-4 py-8 text-center text-xs text-muted">
+            {loadError ? "Your work items couldn't be loaded." : hasActiveFilters ? "No work items match the current filters." : "No work items are currently assigned to you for ownership, review or sub-work."}
+          </p> : workItems.map((item) => <article key={item.id} className="min-w-0 space-y-2 px-4 py-3 text-xs text-copy">
+            <WorkItemLink item={item} className="block min-h-11 min-w-0 text-ink">
+              <span className="block break-all font-mono text-[10px] font-semibold text-muted">{item.reference}</span>
+              <span className="block break-all font-bold">{item.title}</span>
+            </WorkItemLink>
+            <p className="break-all text-muted">{item.workspace_name} / {item.group_name}</p>
+            <div className="flex flex-wrap items-center gap-2"><Relevance item={item} userId={user?.id} />
+              <Badge variant={STATUS_VARIANTS[item.status]}>{STATUS_LABELS[item.status]}</Badge>
+              <Badge variant={PRIORITY_VARIANTS[item.priority]} className="capitalize">{item.priority}</Badge>
+              <span className="text-muted"><DueDate item={item} prefix="Due " empty="Due —" /></span>
+            </div>
+          </article>)}
         </div>
       </Panel>
     </PageContainer>

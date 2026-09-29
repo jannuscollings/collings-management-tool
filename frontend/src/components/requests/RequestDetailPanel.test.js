@@ -5,7 +5,8 @@ import RequestDetailPanel from "./RequestDetailPanel";
 import { workRequestsApi } from "../../api/workRequests";
 import { workApi } from "../../api/work";
 
-jest.mock("react-redux", () => ({ useSelector: (selector) => selector({ auth: { user: { is_staff: true } } }) }));
+let mockIsAdmin = true;
+jest.mock("react-redux", () => ({ useSelector: (selector) => selector({ auth: { user: { is_staff: mockIsAdmin } } }) }));
 jest.mock("../../api/workRequests", () => ({
   REQUEST_PRIORITY_OPTIONS: [["low", "Low"], ["medium", "Medium"], ["high", "High"]],
   workRequestsApi: { get: jest.fn(), triage: jest.fn(), accept: jest.fn() },
@@ -22,10 +23,32 @@ const request = {
 
 beforeEach(() => {
   jest.resetAllMocks();
+  mockIsAdmin = true;
   workRequestsApi.get.mockResolvedValue({ data: request });
   workApi.listWorkspaces.mockResolvedValue({ data: [{ slug: "creative-design" }] });
   workApi.getWorkspace.mockResolvedValue({ data: { name: "Creative & Design", groups: [{ id: 1, name: "Production" }] } });
   workApi.listUsers.mockResolvedValue({ data: [{ id: 7, display_name: "Alice" }, { id: 8, display_name: "Bob" }] });
+});
+
+test("request details wrap long content and keep mobile actions and bottom clearance", async () => {
+  const longText = "UnbrokenRequestContent".repeat(10);
+  workRequestsApi.get.mockResolvedValue({ data: { ...request, title: longText, brief: longText } });
+  render(<MemoryRouter><RequestDetailPanel requestId={3} drawer /></MemoryRouter>);
+  const heading = await screen.findByRole("heading", { name: longText });
+  expect(heading.closest(".break-all")).toBeInTheDocument();
+  expect(screen.getByText(longText, { selector: "dd" })).toHaveClass("break-all", "shell:break-words");
+  expect(heading.closest("[class*='pb-16']")).toHaveClass("pb-16", "shell:pb-0");
+  expect(screen.getByRole("button", { name: "Save triage" })).toHaveClass("min-h-11");
+  expect(screen.getByRole("button", { name: "Accept request" })).toBeInTheDocument();
+});
+
+test("staff request detail remains read-only with mobile clearance", async () => {
+  mockIsAdmin = false;
+  render(<MemoryRouter><RequestDetailPanel requestId={3} /></MemoryRouter>);
+  await screen.findByText("Original request details");
+  expect(screen.queryByRole("button", { name: "Save triage" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Accept request" })).not.toBeInTheDocument();
+  expect(screen.getByText("Original request details").closest("[class*='pb-16']")).toHaveClass("pb-16");
 });
 
 test("accept stays disabled for changed triage until the visible values are saved", async () => {

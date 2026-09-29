@@ -13,6 +13,7 @@ from .attachments import validate_files
 from .access import is_admin, visible_items, can_edit
 from .services import record_activity, record_changes
 from .notifications import notify, assignment_notifications, comment_notifications
+from .due import local_today, due_queryset
 from .models import SubWork, WorkComment, WorkCommentAttachment
 from .serializers import SubWorkSerializer, WorkCommentSerializer, WorkActivitySerializer, WorkLinkSerializer
 from rest_framework import mixins, viewsets
@@ -218,6 +219,10 @@ class WorkItemViewSet(
                 Q(owner=self.request.user) | Q(reviewer=self.request.user)
                 | Q(sub_work__assignee=self.request.user)
             ).distinct()
+
+        due = params.get("due")
+        if due:
+            queryset = due_queryset(queryset, due, local_today(self.request))
 
         workspace = params.get("workspace")
         if workspace:

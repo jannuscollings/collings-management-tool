@@ -2,6 +2,7 @@ import { useState } from "react";
 import { WORK_PRIORITY_OPTIONS, WORK_STATUS_OPTIONS } from "../../api/work";
 import Badge from "../ui/Badge";
 import { Input, Select } from "../ui/Field";
+import DueDate from "./DueDate";
 
 const statusLabels = Object.fromEntries(WORK_STATUS_OPTIONS);
 const statusVariants = { new: "neutral", in_progress: "info", review: "review", done: "success" };
@@ -13,7 +14,7 @@ export default function WorkspaceTableCell({ item, field, users, canEdit, busy, 
   const display = field === "status" ? <Badge variant={statusVariants[value]}>{statusLabels[value]}</Badge>
     : field === "priority" ? <Badge variant={priorityVariants[value]} className="capitalize">{value}</Badge>
       : field === "owner" || field === "reviewer" ? item[`${field}_detail`]?.display_name || "Unassigned"
-        : value || "—";
+        : field === "due_date" ? <DueDate item={item} /> : value || "—";
   const save = async (next) => {
     setEditing(false);
     if (String(next) !== String(value)) await onSave(item, field, next);

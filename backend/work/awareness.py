@@ -1,5 +1,4 @@
 from datetime import timedelta
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from django.db.models import Q, Max, F
 from django.db.models.functions import Greatest
 from django.utils import timezone
@@ -12,15 +11,12 @@ from django.shortcuts import get_object_or_404
 from .access import is_admin, visible_items
 from .models import WorkItem
 from .notifications import visible_notifications
+from .due import local_today, due_queryset
 
 
 class HomeView(APIView):
     def get(self, request):
-        zone = request.query_params.get('timezone')
-        try:
-            today = timezone.localdate(timezone=ZoneInfo(zone) if zone else timezone.get_current_timezone())
-        except (ZoneInfoNotFoundError, ValueError):
-            raise ValidationError({'timezone': 'Use a valid IANA timezone.'})
+        today = local_today(request)
         visible = visible_items(WorkItem.objects.filter(group__archived=False, group__workspace__archived=False), request.user)
         relevant = visible.filter(Q(owner=request.user) | Q(reviewer=request.user) | Q(sub_work__assignee=request.user)).distinct()
         opened = relevant.exclude(status='done')
@@ -32,8 +28,9 @@ class HomeView(APIView):
         result = {
             'today': today.isoformat(), 'due_soon_days': 3,
             'my_open': section(opened),
-            'due_soon': section(opened.filter(due_date__gte=today, due_date__lte=today+timedelta(days=3))),
-            'overdue': section(opened.filter(due_date__lt=today)),
+            'due_today': section(due_queryset(opened, 'today', today)),
+            'due_soon': section(due_queryset(opened, 'soon', today)),
+            'overdue': section(due_queryset(opened, 'overdue', today)),
             'review': section(relevant.filter(reviewer=request.user, status='review')),
             'recent': section(relevant.annotate(last_touch=Greatest(F('updated_at'), Max('activity__created_at')))
                               .filter(last_touch__gte=timezone.now()-timedelta(days=7)), ('-last_touch', '-pk')),

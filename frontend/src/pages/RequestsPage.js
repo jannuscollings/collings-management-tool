@@ -41,7 +41,7 @@ export default function RequestsPage() {
   }, [requestRevision]);
 
   return (
-    <PageContainer>
+    <PageContainer className="pb-16 shell:pb-[34px]">
       <PageHeader
         eyebrow="Manage"
         title="Requests"
@@ -59,7 +59,7 @@ export default function RequestsPage() {
         <Panel className="border-dashed p-8 text-center text-sm text-muted shadow-none">No requests yet.</Panel>
       ) : (
         <Panel className="overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="hidden overflow-x-auto shell:block">
             <table className="w-full min-w-[900px] border-collapse text-left">
               <thead className="bg-canvas/70">
                 <tr className="border-b border-line">
@@ -85,6 +85,21 @@ export default function RequestsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="divide-y divide-line/70 shell:hidden" aria-label="Requests mobile items">
+            {requests.map((request) => <article key={request.id} className="min-w-0 space-y-2 px-4 py-3 text-xs text-copy">
+              <RequestLink request={request} className="block min-h-11 min-w-0 text-ink">
+                <span className="block break-all font-mono text-[10px] font-semibold text-muted">{request.reference}</span>
+                <span className="block break-all font-bold">{request.title}</span>
+              </RequestLink>
+              <p className="break-all text-muted">{request.request_type_label} · Submitted by {request.submitted_by_detail.display_name}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={STATUS_VARIANTS[request.status]}>{request.status_label}</Badge>
+                <Badge variant={PRIORITY_VARIANTS[request.priority]} className="capitalize">{request.priority}</Badge>
+                <span className="text-muted">Due {request.requested_due_date || "—"}</span>
+                <span className="text-muted">Created {new Date(request.created_at).toLocaleDateString()}</span>
+              </div>
+            </article>)}
           </div>
         </Panel>
       )}

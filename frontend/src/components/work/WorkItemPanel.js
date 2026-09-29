@@ -9,6 +9,7 @@ import Badge from "../ui/Badge";
 import { Button } from "../ui/Button";
 import { Field, Input, Select, Textarea } from "../ui/Field";
 import Panel from "../ui/Panel";
+import DueDate from "./DueDate";
 
 const statusVariants = { new: "neutral", in_progress: "info", review: "review", done: "success" };
 const statusLabel = (value) => WORK_STATUS_OPTIONS.find(([key]) => key === value)?.[1] || value;
@@ -174,7 +175,7 @@ export default function WorkItemPanel({ itemId, expectedWorkspace, drawer, onCha
       <Section title="Delivery details" action={permissions.edit && !editing && <Button variant="ghost" disabled={busy} onClick={() => setEditing(true)} className="min-h-11 shell:min-h-[38px]"><Pencil className="h-3.5 w-3.5" /> Edit</Button>}>
         {editing ? <CoreEditor item={item} groups={groups} users={users} busy={busy} onDirty={setCoreDirty} onCancel={() => setEditing(false)} onSave={async (payload) => { if (await run(() => workApi.updateItem(itemId, payload))) setEditing(false); }} /> : <>
           <p className="whitespace-pre-wrap break-words text-[13px] leading-6 text-copy">{item.brief || 'No brief added yet.'}</p>
-          <dl className="mt-5 grid gap-4 border-t border-line pt-4 sm:grid-cols-3"><div><dt className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted">Owner</dt><dd className="text-xs text-copy"><Identity person={item.owner_detail} /></dd></div><div><dt className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted">Reviewer</dt><dd className="text-xs text-copy"><Identity person={item.reviewer_detail} /></dd></div><div><dt className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted">Due date</dt><dd className="pt-1 text-xs font-semibold text-copy">{item.due_date || 'Not set'}</dd></div></dl>
+          <dl className="mt-5 grid gap-4 border-t border-line pt-4 sm:grid-cols-3"><div><dt className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted">Owner</dt><dd className="text-xs text-copy"><Identity person={item.owner_detail} /></dd></div><div><dt className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted">Reviewer</dt><dd className="text-xs text-copy"><Identity person={item.reviewer_detail} /></dd></div><div><dt className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted">Due date</dt><dd className="pt-1 text-xs font-semibold text-copy"><DueDate item={item} empty="Not set" /></dd></div></dl>
         </>}
       </Section>
       <Section title="Sub-work" description={`${subs.filter((sub) => sub.completed).length} of ${subs.length} complete`}>

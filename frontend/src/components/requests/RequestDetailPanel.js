@@ -124,24 +124,24 @@ export default function RequestDetailPanel({ requestId, drawer = false, onChange
   resultQuery.delete("request");
   resultQuery.set("item", result?.id || "");
 
-  return <div className="space-y-5">
-    {drawer && <div className="flex justify-end"><Link to={`/requests/${request.id}`} className="inline-flex items-center gap-1 text-xs font-bold text-brand-strong">Full page <ExternalLink className="h-3.5 w-3.5" /></Link></div>}
-    <PageHeader eyebrow={`Request · ${request.reference}`} title={request.title} description={`Submitted ${new Date(request.created_at).toLocaleDateString()}`} actions={<Badge variant={STATUS_VARIANTS[request.status]}>{request.status_label}</Badge>} />
+  return <div className="min-w-0 space-y-5 pb-16 shell:pb-0">
+    {drawer && <div className="flex justify-end"><Link to={`/requests/${request.id}`} className="inline-flex min-h-11 items-center gap-1 text-xs font-bold text-brand-strong shell:min-h-0">Full page <ExternalLink className="h-3.5 w-3.5" /></Link></div>}
+    <div className="min-w-0 break-all shell:break-words"><PageHeader eyebrow={`Request · ${request.reference}`} title={request.title} description={`Submitted ${new Date(request.created_at).toLocaleDateString()}`} actions={<Badge variant={STATUS_VARIANTS[request.status]}>{request.status_label}</Badge>} /></div>
 
     <Panel className="p-5 sm:p-6">
       <div className="mb-5"><p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-brand-strong dark:text-brand">Submitted request</p><h2 className="mt-1 text-lg font-extrabold text-ink">Original request details</h2><p className="mt-1 text-xs text-muted">These values remain unchanged during triage.</p></div>
       <dl className="grid gap-x-8 gap-y-5 text-[13px] sm:grid-cols-2">
-        <div><dt className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-muted">Request type</dt><dd className="mt-1 font-semibold text-copy">{request.request_type_label}</dd></div>
-        <div><dt className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-muted">Submitted by</dt><dd className="mt-1 font-semibold text-copy">{request.submitted_by_detail.display_name}</dd></div>
+        <div className="min-w-0 break-all shell:break-words"><dt className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-muted">Request type</dt><dd className="mt-1 font-semibold text-copy">{request.request_type_label}</dd></div>
+        <div className="min-w-0 break-all shell:break-words"><dt className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-muted">Submitted by</dt><dd className="mt-1 font-semibold text-copy">{request.submitted_by_detail.display_name}</dd></div>
         <div><dt className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-muted">Priority</dt><dd className="mt-1"><Badge variant={PRIORITY_VARIANTS[request.priority]} className="capitalize">{request.priority}</Badge></dd></div>
         <div><dt className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-muted">Requested due date</dt><dd className="mt-1 font-semibold text-copy">{request.requested_due_date || "No date requested"}</dd></div>
-        <div className="sm:col-span-2"><dt className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-muted">Brief</dt><dd className="mt-1.5 whitespace-pre-wrap leading-6 text-copy">{request.brief || "No brief supplied."}</dd></div>
+        <div className="min-w-0 sm:col-span-2"><dt className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-muted">Brief</dt><dd className="mt-1.5 whitespace-pre-wrap break-all leading-6 text-copy shell:break-words">{request.brief || "No brief supplied."}</dd></div>
       </dl>
     </Panel>
 
     {result && <Panel className="border-positive/30 bg-emerald-50/70 p-5 dark:bg-emerald-950/20 sm:p-6">
-      <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-positive">Accepted</p><h2 className="mt-1 text-lg font-extrabold text-ink">Resulting work item</h2><p className="mt-1 text-xs text-copy">This request was accepted into {result.group_name}.</p>
-      <Button asChild className="mt-4">{drawer ? <Link to={{ pathname: location.pathname, search: resultQuery.toString() }}>Open {result.reference} <ExternalLink className="h-4 w-4" /></Link> : <Link to={`/workspaces/${result.workspace_slug}/items/${result.id}`}>Open {result.reference} <ExternalLink className="h-4 w-4" /></Link>}</Button>
+      <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-positive">Accepted</p><h2 className="mt-1 text-lg font-extrabold text-ink">Resulting work item</h2><p className="mt-1 break-all text-xs text-copy shell:break-words">This request was accepted into {result.group_name}.</p>
+      <Button asChild className="mt-4 min-h-11 shell:min-h-[38px]">{drawer ? <Link to={{ pathname: location.pathname, search: resultQuery.toString() }}>Open {result.reference} <ExternalLink className="h-4 w-4" /></Link> : <Link to={`/workspaces/${result.workspace_slug}/items/${result.id}`}>Open {result.reference} <ExternalLink className="h-4 w-4" /></Link>}</Button>
     </Panel>}
 
     {isAdmin && !terminal && <Panel className="p-5 sm:p-6">
@@ -152,7 +152,7 @@ export default function RequestDetailPanel({ requestId, drawer = false, onChange
         <Field label="Due-date override" hint={request.requested_due_date ? `Requested date: ${request.requested_due_date}` : "No date requested"}><Input type="date" value={triage.triage_due_date} onChange={updateTriage("triage_due_date")} /></Field>
         <Field label="Owner"><Select value={triage.owner} onChange={updateTriage("owner")}><option value="">Unassigned</option>{users.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</Select></Field>
         <Field label="Reviewer"><Select value={triage.reviewer} onChange={updateTriage("reviewer")}><option value="">Unassigned</option>{users.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</Select></Field>
-        <div className="flex flex-wrap gap-2 sm:col-span-2"><Button type="submit" variant="secondary" disabled={saving}>{saving ? "Saving…" : "Save triage"}</Button><Button type="button" variant="dark" onClick={accept} disabled={saving || request.status !== "triaging" || hasUnsavedTriage}>Accept request</Button><Button type="button" variant="danger" onClick={reject} disabled={saving}>Reject request</Button></div>
+        <div className="flex flex-wrap gap-2 sm:col-span-2"><Button type="submit" variant="secondary" disabled={saving} className="min-h-11 shell:min-h-[38px]">{saving ? "Saving…" : "Save triage"}</Button><Button type="button" variant="dark" onClick={accept} disabled={saving || request.status !== "triaging" || hasUnsavedTriage} className="min-h-11 shell:min-h-[38px]">Accept request</Button><Button type="button" variant="danger" onClick={reject} disabled={saving} className="min-h-11 shell:min-h-[38px]">Reject request</Button></div>
         {request.status === "new" && <p className="text-xs text-muted sm:col-span-2">Save triage before accepting the request.</p>}
         {request.status === "triaging" && hasUnsavedTriage && <p role="status" className="text-xs text-muted sm:col-span-2">Save triage before accepting the request.</p>}
       </form>

@@ -5,6 +5,7 @@ import { GripVertical, Loader2 } from "lucide-react";
 import { WORK_STATUS_OPTIONS } from "../../api/work";
 import Badge from "../ui/Badge";
 import { Select } from "../ui/Field";
+import DueDate from "./DueDate";
 
 const PRIORITY_VARIANTS = {
   low: "neutral",
@@ -153,7 +154,7 @@ export default function WorkspaceKanban({
                           <Badge variant={PRIORITY_VARIANTS[item.priority]} className="shrink-0 capitalize">{item.priority}</Badge>
                         </div>
                         <div className="mt-2.5 flex items-center justify-between gap-3 text-[10.5px] text-muted">
-                          <span>{item.due_date ? `Due ${item.due_date}` : "No due date"}</span>
+                          <DueDate item={item} prefix="Due " empty="No due date" />
                           {isSaving && (
                             <span className="inline-flex items-center gap-1 font-bold text-brand-strong dark:text-brand">
                               <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…

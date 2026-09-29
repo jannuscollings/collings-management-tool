@@ -51,11 +51,64 @@ class AwarenessTests(TestCase):
             data = self.client.get('/api/home/?timezone=Asia/Manila').data
         self.assertEqual(data['today'], '2026-09-25')
         self.assertEqual(data['overdue']['count'], 0)
-        self.assertEqual(data['due_soon']['count'], 1)
+        self.assertEqual(data['due_today']['count'], 1)
+        self.assertEqual(data['due_soon']['count'], 0)
         self.assertEqual(data['review']['count'], 1)
         self.client.force_authenticate(self.other)
         self.assertEqual(self.client.get('/api/home/').data['my_open']['count'], 1)
         self.assertEqual(self.client.get('/api/home/?timezone=invalid').status_code, 400)
+
+    def test_due_states_match_complete_my_work_results_and_visibility(self):
+        fixed = datetime(2026, 9, 24, 16, 30, tzinfo=dt_timezone.utc)
+        self.item.due_date = '2026-09-24'
+        self.item.save(update_fields=['due_date'])
+        dates = {
+            'overdue': '2026-09-24', 'today': '2026-09-25',
+            'soon_first': '2026-09-26', 'soon_last': '2026-09-28',
+            'later': '2026-09-29',
+        }
+        items = {name: WorkItem.objects.create(group=self.group, title=name, owner=self.owner,
+            created_by=self.admin, due_date=date) for name, date in dates.items()}
+        done = WorkItem.objects.create(group=self.group, title='done', owner=self.owner,
+            created_by=self.admin, due_date='2026-09-24', status='done')
+        undated = WorkItem.objects.create(group=self.group, title='undated', owner=self.owner,
+            created_by=self.admin)
+        hidden = WorkItem.objects.create(group=self.group, title='hidden', owner=self.other,
+            created_by=self.admin, due_date='2026-09-24')
+        self.client.force_authenticate(self.owner)
+        with patch('work.awareness.timezone.now', return_value=fixed):
+            home = self.client.get('/api/home/?timezone=Asia/Manila').data
+            expected = {
+                'overdue': {self.item.pk, items['overdue'].pk},
+                'today': {items['today'].pk},
+                'soon': {items['soon_first'].pk, items['soon_last'].pk},
+            }
+            for state, ids in expected.items():
+                home_key = 'due_' + state if state != 'overdue' else state
+                self.assertEqual({row['id'] for row in home[home_key]['items']}, ids)
+                response = self.client.get('/api/work-items/', {
+                    'relevance': 'mine', 'due': state, 'timezone': 'Asia/Manila'})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual({row['id'] for row in response.data}, ids)
+            utc_today = self.client.get('/api/work-items/', {'relevance': 'mine',
+                'due': 'today', 'timezone': 'UTC'}).data
+            self.assertEqual({row['id'] for row in utc_today}, expected['overdue'])
+        self.assertEqual(self.client.get('/api/work-items/?due=invalid').status_code, 400)
+        self.assertEqual(self.client.get('/api/work-items/?due=today&timezone=invalid').status_code, 400)
+        self.assertNotIn(done.pk, expected['overdue'])
+        self.assertNotIn(undated.pk, expected['today'])
+        self.assertNotIn(hidden.pk, expected['overdue'])
+
+    def test_home_limit_does_not_limit_due_filtered_my_work(self):
+        for number in range(13):
+            WorkItem.objects.create(group=self.group, title=f'Extra {number}', owner=self.owner,
+                created_by=self.admin, due_date=timezone.localdate()-timedelta(days=1))
+        self.client.force_authenticate(self.owner)
+        home = self.client.get('/api/home/').data
+        mine = self.client.get('/api/work-items/?relevance=mine&due=overdue').data
+        self.assertEqual(home['overdue']['count'], 14)
+        self.assertEqual(len(home['overdue']['items']), 12)
+        self.assertEqual(len(mine), 14)
 
     def test_assignment_review_and_self_suppression(self):
         url = f'/api/work-items/{self.item.pk}/'
