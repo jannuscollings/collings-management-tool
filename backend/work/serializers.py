@@ -5,7 +5,7 @@ from django.db import transaction
 from django.db.models import Prefetch
 from django.utils.text import slugify
 
-from .models import WorkGroup, WorkItem, Workspace, SubWork, WorkComment, WorkActivity, WorkLink
+from .models import WorkGroup, WorkItem, Workspace, SubWork, WorkComment, WorkCommentAttachment, WorkActivity, WorkLink
 from .access import is_admin, visible_items, can_edit, allowed_statuses
 
 User = get_user_model()
@@ -204,18 +204,30 @@ class SubWorkSerializer(serializers.ModelSerializer):
         return user
 
 
+class WorkCommentAttachmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WorkCommentAttachment
+        fields = ("id", "filename", "content_type", "size", "created_at")
+        read_only_fields = fields
+
+
 class WorkCommentSerializer(serializers.ModelSerializer):
     author_detail = WorkUserSerializer(source="author", read_only=True)
-    body = serializers.CharField(max_length=10000, allow_blank=False)
+    body = serializers.CharField(max_length=10000, allow_blank=True)
     mentions = serializers.PrimaryKeyRelatedField(queryset=User.objects.filter(is_active=True), many=True, required=False)
     mention_details = WorkUserSerializer(source='mentions', many=True, read_only=True)
     can_manage = serializers.SerializerMethodField()
+    attachments = WorkCommentAttachmentSerializer(many=True, read_only=True)
 
     def get_can_manage(self, comment):
         user = self.context['request'].user
         return not comment.deleted_at and (comment.author_id == user.pk or is_admin(user))
 
     def validate(self, attrs):
+        if (self.instance and 'body' in attrs and not attrs['body'].strip()) or (
+            not self.instance and not attrs.get('body', '').strip() and not self.context.get('attachment_count')
+        ):
+            raise serializers.ValidationError({'body': 'Enter a comment or attach a file.'})
         if self.instance and 'parent' in attrs and attrs['parent'] != self.instance.parent:
             raise serializers.ValidationError({'parent': 'Replies cannot be moved.'})
         parent = attrs.get('parent')
@@ -226,12 +238,12 @@ class WorkCommentSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
         if instance.deleted_at:
-            data.update(body='', mentions=[], mention_details=[])
+            data.update(body='', mentions=[], mention_details=[], attachments=[])
         return data
 
     class Meta:
         model = WorkComment
-        fields = ("id", "author_detail", "body", "created_at", "parent", "mentions", "mention_details", "edited_at", "deleted_at", "can_manage")
+        fields = ("id", "author_detail", "body", "created_at", "parent", "mentions", "mention_details", "edited_at", "deleted_at", "can_manage", "attachments")
         read_only_fields = ("id", "created_at", "edited_at", "deleted_at")
 
 

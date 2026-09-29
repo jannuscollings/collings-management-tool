@@ -3,13 +3,17 @@ from django.db.models import Count, Q
 from django.db import transaction
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
+from django.core.files.storage import default_storage
+from django.http import FileResponse
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import NotFound, PermissionDenied
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from .attachments import validate_files
 from .access import is_admin, visible_items, can_edit
 from .services import record_activity, record_changes
 from .notifications import notify, assignment_notifications, comment_notifications
-from .models import SubWork, WorkComment
+from .models import SubWork, WorkComment, WorkCommentAttachment
 from .serializers import SubWorkSerializer, WorkCommentSerializer, WorkActivitySerializer, WorkLinkSerializer
 from rest_framework import mixins, viewsets
 from rest_framework.exceptions import ValidationError
@@ -279,19 +283,49 @@ class WorkItemViewSet(
             raise PermissionDenied("Your access to this work item has changed.")
         return item
 
-    @action(detail=True, methods=["get", "post"])
-    @transaction.atomic
+    @action(detail=True, methods=["get", "post"], parser_classes=[JSONParser, MultiPartParser, FormParser])
     def comments(self, request, pk=None):
-        item = self.locked_item() if request.method == 'POST' else self.get_object()
-        context = {'request': request, 'item': item}
         if request.method == "POST":
-            serializer = WorkCommentSerializer(data=request.data, context=context)
-            serializer.is_valid(raise_exception=True)
-            serializer.save(work_item=item, author=request.user)
-            comment_notifications(serializer.instance, request.user, reply=True)
-            record_activity(item, request.user, "reply_added" if serializer.instance.parent_id else "comment_added", comment_id=serializer.instance.pk)
+            stored = []
+            try:
+                with transaction.atomic():
+                    item = self.locked_item()
+                    files = validate_files(request.FILES.getlist("attachments"))
+                    context = {'request': request, 'item': item, 'attachment_count': len(files)}
+                    serializer = WorkCommentSerializer(data=request.data, context=context)
+                    serializer.is_valid(raise_exception=True)
+                    serializer.save(work_item=item, author=request.user, body=serializer.validated_data.get('body', ''))
+                    for file, filename, content_type, key in files:
+                        name = default_storage.save(key, file)
+                        stored.append(name)
+                        WorkCommentAttachment.objects.create(comment=serializer.instance, file=name,
+                                                             filename=filename, content_type=content_type, size=file.size)
+                    comment_notifications(serializer.instance, request.user, reply=True)
+                    record_activity(item, request.user, "reply_added" if serializer.instance.parent_id else "comment_added", comment_id=serializer.instance.pk)
+            except Exception:
+                for name in stored:
+                    default_storage.delete(name)
+                raise
             return Response(serializer.data, status=201)
-        return Response(WorkCommentSerializer(item.comments.select_related("author").prefetch_related('mentions'), many=True, context=context).data)
+        item = self.get_object()
+        context = {'request': request, 'item': item}
+        return Response(WorkCommentSerializer(item.comments.select_related("author").prefetch_related('mentions', 'attachments'), many=True, context=context).data)
+
+    @action(detail=True, methods=['get'], url_path=r'comments/(?P<comment_id>[0-9]+)/attachments/(?P<attachment_id>[0-9]+)')
+    def comment_attachment(self, request, pk=None, comment_id=None, attachment_id=None):
+        item = self.get_object()
+        attachment = get_object_or_404(WorkCommentAttachment.objects.select_related('comment'),
+                                       pk=attachment_id, comment_id=comment_id, comment__work_item=item,
+                                       comment__deleted_at__isnull=True)
+        try:
+            stream = attachment.file.open('rb')
+        except (OSError, FileNotFoundError):
+            raise NotFound('Attachment is unavailable.')
+        response = FileResponse(stream, as_attachment=not attachment.content_type.startswith('image/'),
+                                filename=attachment.filename, content_type=attachment.content_type)
+        response['X-Content-Type-Options'] = 'nosniff'
+        response['Cache-Control'] = 'private, no-store'
+        return response
 
     @action(detail=True, methods=['patch', 'delete'], url_path=r'comments/(?P<comment_id>[0-9]+)')
     @transaction.atomic

@@ -127,6 +127,18 @@ class WorkComment(models.Model):
         ordering = ("created_at", "pk")
 
 
+class WorkCommentAttachment(models.Model):
+    comment = models.ForeignKey(WorkComment, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to="discussion/")
+    filename = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=100)
+    size = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("created_at", "pk")
+
+
 class WorkActivity(models.Model):
     work_item = models.ForeignKey(WorkItem, on_delete=models.CASCADE, related_name="activity")
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)

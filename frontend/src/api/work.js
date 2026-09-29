@@ -2,7 +2,18 @@ import api from "./index";
 
 export const workApi = {
   listComments: (id) => api.get(`/api/work-items/${id}/comments/`),
-  createComment: (id, payload) => api.post(`/api/work-items/${id}/comments/`, payload),
+  createComment: (id, payload) => {
+    if (!payload.attachments?.length) return api.post(`/api/work-items/${id}/comments/`, payload);
+    const form = new FormData();
+    form.append('body', payload.body);
+    payload.mentions.forEach((mention) => form.append('mentions', mention));
+    if (payload.parent) form.append('parent', payload.parent);
+    payload.attachments.forEach((file) => form.append('attachments', file));
+    return api.post(`/api/work-items/${id}/comments/`, form, { headers: { 'Content-Type': undefined } });
+  },
+  getCommentAttachment: (id, commentId, attachmentId) => api.get(
+    `/api/work-items/${id}/comments/${commentId}/attachments/${attachmentId}/`, { responseType: 'blob' }
+  ),
   editComment: (id, commentId, payload) => api.patch(`/api/work-items/${id}/comments/${commentId}/`, payload),
   deleteComment: (id, commentId) => api.delete(`/api/work-items/${id}/comments/${commentId}/`),
   listActivity: (id) => api.get(`/api/work-items/${id}/activity/`),

@@ -1,4 +1,5 @@
 import "@testing-library/jest-dom";
+import { StrictMode } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryRouter, createRoutesFromElements, MemoryRouter, Route, RouterProvider, useLocation, useNavigate } from "react-router-dom";
 import WorkItemDrawer from "./WorkItemDrawer";
@@ -15,7 +16,7 @@ jest.mock("../../api/work", () => ({
   workApi: {
     listWorkspaces: jest.fn(), getItem: jest.fn(), listComments: jest.fn(), listActivity: jest.fn(),
     listSubWork: jest.fn(), listLinks: jest.fn(), getWorkspace: jest.fn(), listUsers: jest.fn(),
-    updateItem: jest.fn(), createComment: jest.fn(), editComment: jest.fn(), createSubWork: jest.fn(),
+    updateItem: jest.fn(), createComment: jest.fn(), getCommentAttachment: jest.fn(), editComment: jest.fn(), createSubWork: jest.fn(),
     updateSubWork: jest.fn(), createLink: jest.fn(), review: jest.fn(),
   },
 }));
@@ -32,6 +33,7 @@ jest.mock("@radix-ui/react-dialog", () => ({
     return <>{children}</>;
   },
   Portal: ({ children }) => <>{children}</>,
+  Trigger: ({ children }) => <>{children}</>,
   Overlay: () => <button aria-label="Drawer overlay" onClick={() => mockCloseDrawer()} />,
   Content: ({ children, className, id }) => <div className={className} id={id}>{children}</div>,
   Title: ({ children }) => <div>{children}</div>,
@@ -66,7 +68,7 @@ function Location() {
   }}>Change view</button></>;
 }
 
-function setup({ comments = [], subs = [], links = [], detail = item, guarded = false } = {}) {
+function setup({ comments = [], subs = [], links = [], detail = item, guarded = false, strict = false } = {}) {
   workApi.listWorkspaces.mockResolvedValue({ data: [] });
   awarenessApi.notifications.mockResolvedValue({ data: { items: [], unread_count: 0, next_before: null } });
   workApi.getItem.mockResolvedValue({ data: detail });
@@ -82,10 +84,12 @@ function setup({ comments = [], subs = [], links = [], detail = item, guarded = 
     </Route>), { initialEntries: ["/home?item=1"] });
     return render(<RouterProvider router={router} />);
   }
-  return render(<MemoryRouter initialEntries={["/home?item=1"]}><WorkItemDrawer><Location /></WorkItemDrawer></MemoryRouter>);
+  const tree = <MemoryRouter initialEntries={["/home?item=1"]}><WorkItemDrawer><Location /></WorkItemDrawer></MemoryRouter>;
+  return render(strict ? <StrictMode>{tree}</StrictMode> : tree);
 }
 
-beforeEach(() => { jest.resetAllMocks(); mockUser = { id: 1, is_staff: true }; jest.spyOn(window, "confirm").mockReturnValue(false); });
+beforeEach(() => { jest.resetAllMocks(); mockUser = { id: 1, is_staff: true }; jest.spyOn(window, "confirm").mockReturnValue(false);
+  URL.createObjectURL = jest.fn(() => 'blob:preview'); URL.revokeObjectURL = jest.fn(); });
 afterEach(() => { window.confirm.mockRestore(); });
 
 test("router guard gives one confirmation for X, overlay and Escape while keeping review and post drafts", async () => {
@@ -277,4 +281,102 @@ test("Staff keeps discussion access without Admin and reviewer controls", async 
   expect(screen.queryByRole("textbox", { name: /^Review note/ })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: /Updates/ }));
   expect(screen.getByRole("textbox", { name: /^Post update/ })).toBeInTheDocument();
+});
+
+test("selected files support attachment-only posting, removal, failed retry and independent drafts", async () => {
+  setup({ guarded: true });
+  await screen.findByText("Saved brief");
+  fireEvent.change(screen.getByRole("textbox", { name: /^Review note/ }), { target: { value: "Review draft" } });
+  fireEvent.click(screen.getByRole("button", { name: /Updates/ }));
+  const picker = screen.getByLabelText("Add attachments to post update");
+  const first = new File(["%PDF-hello"], "brief.pdf", { type: "application/pdf" });
+  const second = new File(["notes"], "notes.txt", { type: "text/plain" });
+  fireEvent.change(picker, { target: { files: [first, second] } });
+  expect(screen.getByRole("button", { name: "Post update" })).toBeEnabled();
+  expect(screen.getByText("brief.pdf")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Remove notes.txt" }));
+  fireEvent.click(screen.getByRole("button", { name: "Close work item" }));
+  expect(window.confirm).toHaveBeenCalledTimes(1);
+  workApi.createComment.mockRejectedValueOnce(new Error("Upload failed"));
+  fireEvent.click(screen.getByRole("button", { name: "Post update" }));
+  await waitFor(() => expect(workApi.createComment).toHaveBeenCalledTimes(1));
+  expect(workApi.createComment.mock.calls[0][1].attachments).toEqual([first]);
+  await waitFor(() => expect(screen.getByRole("button", { name: "Post update" })).toBeEnabled());
+  expect(screen.getByText("brief.pdf")).toBeInTheDocument();
+  workApi.createComment.mockResolvedValueOnce({ data: {} });
+  fireEvent.click(screen.getByRole("button", { name: "Post update" }));
+  await waitFor(() => expect(screen.queryByText("brief.pdf")).not.toBeInTheDocument());
+  fireEvent.click(screen.getByRole("button", { name: "Close work item" }));
+  expect(window.confirm).toHaveBeenCalledTimes(2); // review note remains dirty
+});
+
+test("successful top-level attachment post clears selection before the next post in StrictMode", async () => {
+  setup({ strict: true });
+  await screen.findByText("Saved brief");
+  fireEvent.click(screen.getByRole("button", { name: /Updates/ }));
+  const first = new File(["image one"], "first.png", { type: "image/png" });
+  const second = new File(["image two"], "second.png", { type: "image/png" });
+  workApi.createComment.mockResolvedValue({ data: {} });
+  fireEvent.change(screen.getByLabelText("Add attachments to post update"), { target: { files: [first] } });
+  fireEvent.click(screen.getByRole("button", { name: "Post update" }));
+  await waitFor(() => expect(workApi.createComment).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(screen.queryByText("first.png")).not.toBeInTheDocument());
+  fireEvent.change(screen.getByLabelText("Add attachments to post update"), { target: { files: [second] } });
+  fireEvent.click(screen.getByRole("button", { name: "Post update" }));
+  await waitFor(() => expect(workApi.createComment).toHaveBeenCalledTimes(2));
+  expect(workApi.createComment.mock.calls[1][1].attachments).toEqual([second]);
+});
+
+test("pasted screenshot in a reply survives tabs and protects thread switching", async () => {
+  setup({ comments: [comment(1, "First"), comment(2, "Second")] });
+  await screen.findByText("Saved brief");
+  fireEvent.click(screen.getByRole("button", { name: /Updates/ }));
+  fireEvent.change(screen.getByLabelText("Add attachments to post update"), {
+    target: { files: [new File(["%PDF-post"], "post.pdf", { type: "application/pdf" })] },
+  });
+  fireEvent.click(within(screen.getByText("First").closest("section")).getByRole("button", { name: "Reply" }));
+  const screenshot = new File(["image"], "screenshot.png", { type: "image/png" });
+  fireEvent.paste(screen.getByRole("textbox", { name: /^Post reply/ }), {
+    clipboardData: { items: [{ type: "image/png", getAsFile: () => screenshot }] },
+  });
+  expect(screen.getByAltText("", { selector: "img" })).toHaveAttribute("src", "blob:preview");
+  fireEvent.click(screen.getByRole("button", { name: "Activity" }));
+  fireEvent.click(screen.getByRole("button", { name: /Updates/ }));
+  expect(screen.getByText("screenshot.png")).toBeInTheDocument();
+  fireEvent.click(within(screen.getByText("Second").closest("section")).getByRole("button", { name: "Reply" }));
+  expect(window.confirm).toHaveBeenCalledTimes(1);
+  workApi.createComment.mockResolvedValueOnce({ data: {} });
+  fireEvent.click(screen.getByRole("button", { name: "Post reply" }));
+  await waitFor(() => expect(workApi.createComment).toHaveBeenCalledTimes(1));
+  expect(workApi.createComment.mock.calls[0][1]).toMatchObject({ body: "", parent: 1, attachments: [screenshot] });
+  expect(screen.getByText("post.pdf")).toBeInTheDocument();
+});
+
+test("removing the final attachment clears only that discussion dirty source", async () => {
+  setup();
+  await screen.findByText("Saved brief");
+  fireEvent.click(screen.getByRole("button", { name: /Updates/ }));
+  fireEvent.change(screen.getByLabelText("Add attachments to post update"), {
+    target: { files: [new File(["%PDF-file"], "draft.pdf", { type: "application/pdf" })] },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Remove draft.pdf" }));
+  fireEvent.click(screen.getByRole("button", { name: "Close work item" }));
+  expect(window.confirm).not.toHaveBeenCalled();
+  expect(screen.getByTestId("location")).not.toHaveTextContent("item=1");
+});
+
+test("posted images and files use authenticated attachment retrieval", async () => {
+  const posted = { ...comment(1, "See files"), attachments: [
+    { id: 10, filename: "screenshot.png", content_type: "image/png", size: 10 },
+    { id: 11, filename: "brief.pdf", content_type: "application/pdf", size: 20 },
+  ] };
+  workApi.getCommentAttachment.mockResolvedValue({ data: new Blob(["file"]) });
+  setup({ comments: [posted] });
+  await screen.findByText("Saved brief");
+  fireEvent.click(screen.getByRole("button", { name: /Updates/ }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "View screenshot.png" })).toBeInTheDocument());
+  expect(workApi.getCommentAttachment).toHaveBeenCalledWith("1", 1, 10);
+  expect(screen.getByRole("button", { name: "Download brief.pdf" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "View screenshot.png" }));
+  expect(screen.getByRole("button", { name: "Close image" })).toBeInTheDocument();
 });
