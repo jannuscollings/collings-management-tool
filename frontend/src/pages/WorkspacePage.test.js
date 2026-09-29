@@ -68,11 +68,11 @@ test("admin inline change patches one field and leaves title drawer navigation i
   workApi.updateItem.mockResolvedValue({ data: { ...items[0], priority: "high" } });
   setup();
   await screen.findByRole("link", { name: "Zebra" });
-  fireEvent.click(screen.getByRole("button", { name: "Edit priority for WI-000002" }));
-  fireEvent.change(screen.getByRole("combobox", { name: "Edit priority for WI-000002" }), { target: { value: "high" } });
+  fireEvent.click(within(screen.getByRole("table")).getByRole("button", { name: "Edit priority for WI-000002" }));
+  fireEvent.change(within(screen.getByRole("table")).getByRole("combobox", { name: "Edit priority for WI-000002" }), { target: { value: "high" } });
   await waitFor(() => expect(workApi.updateItem).toHaveBeenCalledWith(2, { priority: "high" }));
-  await waitFor(() => expect(screen.getByRole("button", { name: "Edit priority for WI-000002" })).toHaveTextContent("high"));
-  expect(screen.getByRole("link", { name: "Zebra" })).toHaveAttribute("href", "/workspaces/creative-design/?item=2");
+  await waitFor(() => expect(within(screen.getByRole("table")).getByRole("button", { name: "Edit priority for WI-000002" })).toHaveTextContent("high"));
+  expect(within(screen.getByRole("table")).getByRole("link", { name: "Zebra" })).toHaveAttribute("href", "/workspaces/creative-design/?item=2");
 });
 
 test("standard users can sort but get no inline property controls", async () => {
@@ -80,7 +80,7 @@ test("standard users can sort but get no inline property controls", async () => 
   workApi.listWorkItems.mockResolvedValue({ data: items.map((item) => ({ ...item, permissions: { ...item.permissions, manage: true } })) });
   setup();
   await screen.findByRole("link", { name: "Zebra" });
-  expect(screen.queryByRole("button", { name: /Edit priority for/ })).toBeNull();
+  expect(within(screen.getByRole("table")).queryByRole("button", { name: /Edit priority for/ })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Work item" }));
   expect(screen.getByTestId("location").textContent).toContain("sort=title");
 });
@@ -89,15 +89,69 @@ test("review status offers no generic route to Done", async () => {
   workApi.listWorkItems.mockResolvedValue({ data: [{ ...items[0], status: "review", permissions: { manage: true, statuses: ["review"] } }] });
   setup();
   await screen.findByRole("link", { name: "Zebra" });
-  fireEvent.click(screen.getByRole("button", { name: "Edit status for WI-000002" }));
-  expect(within(screen.getByRole("combobox", { name: "Edit status for WI-000002" })).getAllByRole("option").map((option) => option.value)).toEqual(["review"]);
+  fireEvent.click(within(screen.getByRole("table")).getByRole("button", { name: "Edit status for WI-000002" }));
+  expect(within(within(screen.getByRole("table")).getByRole("combobox", { name: "Edit status for WI-000002" })).getAllByRole("option").map((option) => option.value)).toEqual(["review"]);
 });
 
 test("a failed inline save restores the displayed value", async () => {
   workApi.updateItem.mockRejectedValue({ response: { data: { priority: ["Invalid priority."] } } });
   setup();
   await screen.findByRole("link", { name: "Zebra" });
-  fireEvent.click(screen.getByRole("button", { name: "Edit priority for WI-000002" }));
-  fireEvent.change(screen.getByRole("combobox", { name: "Edit priority for WI-000002" }), { target: { value: "high" } });
-  await waitFor(() => expect(screen.getByRole("button", { name: "Edit priority for WI-000002" })).toHaveTextContent("medium"));
+  fireEvent.click(within(screen.getByRole("table")).getByRole("button", { name: "Edit priority for WI-000002" }));
+  fireEvent.change(within(screen.getByRole("table")).getByRole("combobox", { name: "Edit priority for WI-000002" }), { target: { value: "high" } });
+  await waitFor(() => expect(within(screen.getByRole("table")).getByRole("button", { name: "Edit priority for WI-000002" })).toHaveTextContent("medium"));
+});
+
+test("mobile work items retain context, opening, and permitted Admin editing", async () => {
+  workApi.listWorkItems.mockResolvedValue({ data: [{ ...items[0], owner: 7, owner_detail: { display_name: "Amy" }, reviewer_detail: { display_name: "Lee" }, due_date: "2026-10-15" }] });
+  workApi.updateItem.mockResolvedValue({ data: { ...items[0], priority: "high" } });
+  setup();
+  const list = await screen.findByRole("list", { name: "Property launch mobile work items" });
+  const card = await within(list).findByRole("listitem");
+  expect(card).toHaveTextContent("Zebra");
+  expect(card).toHaveTextContent("WI-000002");
+  expect(card).toHaveTextContent("New");
+  expect(card).toHaveTextContent("medium");
+  expect(card).toHaveTextContent("Amy");
+  expect(card).toHaveTextContent("2026-10-15");
+  expect(card).toHaveTextContent("Lee");
+  expect(within(card).getByRole("link", { name: /Zebra/ })).toHaveAttribute("href", "/workspaces/creative-design/?item=2");
+  fireEvent.click(within(card).getByRole("button", { name: "Edit priority for WI-000002" }));
+  fireEvent.change(within(card).getByRole("combobox", { name: "Edit priority for WI-000002" }), { target: { value: "high" } });
+  await waitFor(() => expect(workApi.updateItem).toHaveBeenCalledWith(2, { priority: "high" }));
+});
+
+test("mobile filters collapse behind a count and keep URL-backed state", async () => {
+  setup("/workspaces/creative-design/?sort=title&direction=asc&status=new");
+  await screen.findByRole("list", { name: "Property launch mobile work items" });
+  const filters = screen.getByRole("button", { name: "Filters 1" });
+  expect(filters).toHaveAttribute("aria-expanded", "false");
+  fireEvent.click(filters);
+  expect(filters).toHaveAttribute("aria-expanded", "true");
+  expect(document.getElementById("workspace-mobile-filters")).toHaveClass("grid-cols-2", "gap-2");
+  fireEvent.change(screen.getByLabelText("Priority"), { target: { value: "high" } });
+  await waitFor(() => expect(screen.getByRole("button", { name: "Filters 2" })).toBeInTheDocument());
+  expect(screen.getByTestId("location")).toHaveTextContent("priority=high");
+  fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+  expect(screen.getByTestId("location")).toHaveTextContent("sort=title&direction=asc");
+  expect(screen.getByRole("button", { name: "Filters" })).toBeInTheDocument();
+});
+
+test("Workspace Table and Kanban share mobile bottom clearance without changing desktop padding", async () => {
+  setup();
+  await screen.findByRole("list", { name: "Property launch mobile work items" });
+  const workspacePage = screen.getByRole("heading", { name: "Creative & Design" }).closest("[class*='pb-16']");
+  expect(workspacePage).toHaveClass("pb-16", "shell:pb-[34px]");
+  fireEvent.click(screen.getByRole("button", { name: "Kanban" }));
+  expect(screen.getByText("Kanban view")).toBeInTheDocument();
+  expect(workspacePage).toHaveClass("pb-16", "shell:pb-[34px]");
+});
+
+test("mobile Staff items show details without edit controls", async () => {
+  mockUser = { is_staff: false };
+  setup();
+  const list = await screen.findByRole("list", { name: "Property launch mobile work items" });
+  await within(list).findAllByRole("listitem");
+  expect(within(list).queryByRole("button", { name: /Edit (status|priority|owner|reviewer|due_date)/ })).toBeNull();
+  expect(within(list).getAllByRole("link")).toHaveLength(2);
 });

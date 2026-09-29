@@ -64,8 +64,8 @@ export default function WorkspaceKanban({
   };
 
   return (
-    <div className={`-mx-4 overflow-x-auto px-4 pb-3 transition-opacity sm:-mx-6 sm:px-6 shell:-mx-0 shell:px-0 ${loading ? "opacity-70" : "opacity-100"}`}>
-      <div className="grid min-w-max auto-cols-[minmax(280px,82vw)] grid-flow-col items-start gap-4 xl:min-w-0 xl:grid-cols-4 xl:grid-flow-row xl:auto-cols-auto">
+    <div className={`-mx-4 snap-x snap-mandatory scroll-px-4 overflow-x-auto overscroll-x-contain px-4 pb-3 transition-opacity sm:-mx-6 sm:px-6 shell:-mx-0 shell:snap-none shell:overscroll-auto shell:px-0 ${loading ? "opacity-70" : "opacity-100"}`}>
+      <div className="grid min-w-max auto-cols-[minmax(280px,calc(100vw_-_5.5rem))] grid-flow-col items-start gap-4 shell:auto-cols-[minmax(280px,82vw)] xl:min-w-0 xl:grid-cols-4 xl:grid-flow-row xl:auto-cols-auto">
         {WORK_STATUS_OPTIONS.map(([status, label]) => {
           const columnItems = itemsByStatus[status];
           const draggedItem = items.find((item) => item.id === draggedItemId);
@@ -85,7 +85,7 @@ export default function WorkspaceKanban({
                 if (!event.currentTarget.contains(event.relatedTarget)) setDragOverStatus(null);
               }}
               onDrop={(event) => dropIntoStatus(event, status)}
-              className={`overflow-hidden rounded-ds-lg border bg-canvas/50 transition-all ${
+              className={`snap-start overflow-hidden rounded-ds-lg border bg-canvas/50 transition-all ${
                 isDropTarget
                   ? "border-brand bg-brand-soft/25 shadow-[0_0_0_3px_rgba(45,200,219,0.12)]"
                   : "border-line"

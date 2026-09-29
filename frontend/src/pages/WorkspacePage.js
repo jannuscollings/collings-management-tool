@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { DrawerLink, WorkItemLink, useWorkItemContext } from "../components/work/WorkItemDrawer";
 import toast from "react-hot-toast";
-import { LayoutGrid, List, Plus, Search, X } from "lucide-react";
+import { LayoutGrid, List, Plus, Search, SlidersHorizontal, X } from "lucide-react";
 
 import { WORK_PRIORITY_OPTIONS, WORK_STATUS_OPTIONS, workApi } from "../api/work";
 import PageContainer from "../components/layout/PageContainer";
@@ -48,9 +48,11 @@ export default function WorkspacePage() {
   const sortColumn = TABLE_COLUMNS.some(([key]) => key === searchParams.get("sort")) ? searchParams.get("sort") : null;
   const sortDirection = ["asc", "desc"].includes(searchParams.get("direction")) ? searchParams.get("direction") : null;
   const [searchInput, setSearchInput] = useState(querySearch);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const currentQuery = useRef("");
   currentQuery.current = JSON.stringify([workspaceSlug, querySearch, statusFilter, priorityFilter, ownerFilter]);
   const hasActiveFilters = Boolean(querySearch || statusFilter || priorityFilter || ownerFilter);
+  const advancedFilterCount = [statusFilter, priorityFilter, ownerFilter].filter(Boolean).length;
 
   useEffect(() => {
     let active = true;
@@ -238,7 +240,7 @@ export default function WorkspacePage() {
   if (!workspace) return <PageContainer className="text-sm text-copy">Workspace unavailable.</PageContainer>;
 
   return (
-    <PageContainer>
+    <PageContainer className="pb-16 shell:pb-[34px]">
       <PageHeader
         eyebrow="Workspace"
         title={workspace.name}
@@ -276,8 +278,8 @@ export default function WorkspacePage() {
         }
       />
 
-      <Panel className="mb-5 p-4">
-        <div className="grid gap-3 sm:grid-cols-2 shell:grid-cols-[minmax(230px,2fr)_repeat(3,minmax(140px,1fr))_auto] shell:items-end">
+      <Panel className="mb-5 p-3 shell:p-4">
+        <div className="grid gap-2 shell:grid-cols-[minmax(230px,2fr)_repeat(3,minmax(140px,1fr))_auto] shell:items-end shell:gap-3">
           <Field label="Search">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
@@ -290,33 +292,33 @@ export default function WorkspacePage() {
               />
             </div>
           </Field>
-          <Field label="Status">
+          <button type="button" aria-expanded={mobileFiltersOpen} aria-controls="workspace-mobile-filters" onClick={() => setMobileFiltersOpen((value) => !value)}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-ds-xs border border-line bg-surface px-3 text-xs font-bold text-copy focus-visible:ring-2 focus-visible:ring-brand shell:hidden">
+            <SlidersHorizontal className="h-4 w-4" aria-hidden="true" /> Filters{advancedFilterCount > 0 && <span className="rounded-ds-pill bg-brand-soft px-2 py-0.5 text-brand-strong">{advancedFilterCount}</span>}
+          </button>
+          <div id="workspace-mobile-filters" className={`${mobileFiltersOpen ? "grid" : "hidden"} grid-cols-2 gap-2 shell:contents`}>
+            <Field label="Status">
             <Select value={statusFilter} onChange={updateFilter("status")}>
               <option value="">All statuses</option>
               {WORK_STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </Select>
-          </Field>
-          <Field label="Priority">
+            </Field>
+            <Field label="Priority">
             <Select value={priorityFilter} onChange={updateFilter("priority")}>
               <option value="">All priorities</option>
               {WORK_PRIORITY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </Select>
-          </Field>
-          <Field label="Owner">
+            </Field>
+            <Field label="Owner" className="col-span-2 shell:col-span-1">
             <Select value={ownerFilter} onChange={updateFilter("owner")}>
               <option value="">All owners</option>
               {users.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}
             </Select>
-          </Field>
-          <Button
-            variant="ghost"
-            onClick={clearFilters}
-            disabled={!hasActiveFilters}
-            className="sm:self-end"
-          >
-            <X className="h-4 w-4" />
-            Clear
-          </Button>
+            </Field>
+            <Button variant="ghost" onClick={clearFilters} disabled={!hasActiveFilters} className="col-span-2 min-h-11 shell:col-span-1 shell:min-h-[38px] shell:self-end">
+              <X className="h-4 w-4" /> Clear
+            </Button>
+          </div>
         </div>
         {itemsLoading && <p className="mt-2 text-[10.5px] text-muted">Updating work items…</p>}
       </Panel>
@@ -329,7 +331,7 @@ export default function WorkspacePage() {
                 <h2 className="text-[13px] font-extrabold tracking-[0.02em] text-ink">{group.name}</h2>
                 <Badge variant="neutral">{group.work_items.length} {group.work_items.length === 1 ? "item" : "items"}</Badge>
               </div>
-              <div className="overflow-x-auto">
+              <div className="hidden overflow-x-auto shell:block">
                 <table className="w-full min-w-[980px] border-collapse text-left">
                   <thead className="bg-canvas/35">
                     <tr className="border-b border-line">
@@ -360,6 +362,30 @@ export default function WorkspacePage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div role="list" className="divide-y divide-line/70 shell:hidden" aria-label={`${group.name} mobile work items`}>
+                {group.work_items.length === 0 ? <p className="px-4 py-6 text-center text-xs text-muted">
+                  {hasActiveFilters ? "No work items match the current filters." : "No work items in this group."}
+                </p> : group.work_items.map((item) => {
+                  const canEdit = isAdmin && item.permissions?.manage && !itemsLoading && !pendingMoves.current.has(item.id);
+                  const mobileField = (field, label, className = "") => <div key={field} className={`min-w-0 ${className}`}>
+                    <dt className="text-[10px] font-bold uppercase tracking-wide text-muted">{label}</dt>
+                    <dd className="mt-1 break-words text-xs text-copy"><WorkspaceTableCell item={item} field={field} users={users} canEdit={canEdit} busy={savingCell === `${item.id}:${field}`} onSave={saveCell} /></dd>
+                  </div>;
+                  return <article role="listitem" key={item.id} className="px-4 py-3.5">
+                    <WorkItemLink item={item} className="block min-h-11 rounded-ds-xs focus-visible:ring-2 focus-visible:ring-brand">
+                      <span className="block break-words text-sm font-extrabold text-ink">{item.title}</span>
+                      <span className="mt-1 block font-mono text-[10.5px] font-semibold text-muted">{item.reference}</span>
+                    </WorkItemLink>
+                    <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2.5">
+                      {mobileField("status", "Status")}
+                      {mobileField("priority", "Priority")}
+                      {mobileField("owner", "Owner")}
+                      {mobileField("due_date", "Due")}
+                      {mobileField("reviewer", "Reviewer", "col-span-2 border-t border-line/70 pt-2")}
+                    </dl>
+                  </article>;
+                })}
               </div>
             </Panel>
           </section>
