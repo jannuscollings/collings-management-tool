@@ -444,9 +444,9 @@ class WorkApiTests(TestCase):
         self.assertEqual(self.client.delete(f"/api/workspaces/solo/boards/{board.pk}/").status_code, 400)
         workspace.archived = True
         workspace.save()
-        self.assertEqual(self.client.post("/api/workspaces/solo/boards/", {"name": "New"}, format="json").status_code, 400)
-        self.assertEqual(self.client.patch(f"/api/workspaces/solo/boards/{board.pk}/", {"name": "Other"}, format="json").status_code, 400)
-        self.assertEqual(self.client.post("/api/workspaces/solo/boards/reorder/", {"board_ids": [board.pk]}, format="json").status_code, 400)
+        self.assertEqual(self.client.post("/api/workspaces/solo/boards/", {"name": "New"}, format="json").status_code, 404)
+        self.assertEqual(self.client.patch(f"/api/workspaces/solo/boards/{board.pk}/", {"name": "Other"}, format="json").status_code, 404)
+        self.assertEqual(self.client.post("/api/workspaces/solo/boards/reorder/", {"board_ids": [board.pk]}, format="json").status_code, 404)
 
     def test_non_admin_cannot_manage_boards(self):
         self.client.force_authenticate(self.assignee)
@@ -524,7 +524,7 @@ class WorkApiTests(TestCase):
             [video.pk, self.workspace.pk],
         )
 
-    def test_workspace_list_respects_order_and_only_admin_can_include_archived(self):
+    def test_workspace_list_respects_order_and_excludes_archived_for_everyone(self):
         video = Workspace.objects.create(name="Video", slug="video", display_order=2)
         archived = Workspace.objects.create(name="Archive", slug="archive", display_order=3, archived=True)
         self.client.force_authenticate(self.assignee)
@@ -537,8 +537,9 @@ class WorkApiTests(TestCase):
         self.assertEqual([workspace["id"] for workspace in regular.data], [self.workspace.pk, video.pk])
         self.assertEqual(
             [workspace["id"] for workspace in admin.data],
-            [self.workspace.pk, video.pk, archived.pk],
+            [self.workspace.pk, video.pk],
         )
+        self.assertEqual([row["id"] for row in self.client.get("/api/archive/").data["workspaces"]], [archived.pk])
 
     def test_workspace_reorder_rejects_incomplete_list_without_changes(self):
         video = Workspace.objects.create(name="Video", slug="video", display_order=2)

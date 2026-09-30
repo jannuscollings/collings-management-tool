@@ -6,11 +6,13 @@ def is_admin(user):
 
 
 def visible_items(queryset, user):
+    queryset = queryset.filter(
+        archived=False, group__archived=False, group__workspace__archived=False,
+    )
     if is_admin(user):
         return queryset
     return queryset.filter(
         Q(owner=user) | Q(reviewer=user) | Q(sub_work__assignee=user),
-        group__archived=False, group__workspace__archived=False,
     ).distinct()
 
 

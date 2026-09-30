@@ -10,6 +10,7 @@ import NewRequestPage from "./pages/NewRequestPage";
 import RequestDetailPage from "./pages/RequestDetailPage";
 import MyWorkPage from "./pages/MyWorkPage";
 import HomePage from "./pages/HomePage";
+import ArchivePage from "./pages/ArchivePage";
 import AppShell from "./components/layout/AppShell";
 import NavigationGuard from "./components/navigation/NavigationGuard";
 
@@ -34,6 +35,7 @@ const router = createBrowserRouter(createRoutesFromElements(
           <Route path="/" element={<Navigate to="/home" replace />} />
           <Route path="/home" element={<HomePage />} />
           <Route path="/my-work" element={<MyWorkPage />} />
+          <Route path="/archive" element={<ArchivePage />} />
           <Route path="/requests" element={<RequestsPage />} />
           <Route path="/requests/new" element={<NewRequestPage />} />
           <Route path="/requests/:requestId" element={<RequestDetailPage />} />

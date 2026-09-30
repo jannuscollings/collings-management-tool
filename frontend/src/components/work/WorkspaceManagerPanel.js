@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { Archive, ArrowDown, ArrowUp, RotateCcw, Trash2 } from "lucide-react";
+import { Archive, ArrowDown, ArrowUp, Trash2 } from "lucide-react";
 
 import { workApi } from "../../api/work";
 import Badge from "../ui/Badge";
@@ -21,7 +21,7 @@ export default function WorkspaceManagerPanel({ onChanged, onDirty, onBusy }) {
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await workApi.listWorkspaces({ include_archived: true });
+      const { data } = await workApi.listWorkspaces();
       const boardEntries = await Promise.all(data.map(async (workspace) => [workspace.id, (await workApi.listBoards(workspace.slug)).data]));
       const nextBoards = Object.fromEntries(boardEntries);
       setWorkspaces(data);
@@ -114,6 +114,18 @@ export default function WorkspaceManagerPanel({ onChanged, onDirty, onBusy }) {
     finally { setBusyId(null); }
   };
 
+  const archiveBoard = async (workspace, board) => {
+    if (!window.confirm(`Archive ${board.name}? Its work and request links will be preserved.`)) return;
+    setBusyId(workspace.id);
+    try {
+      await workApi.archiveBoard(workspace.slug, board.id);
+      toast.success("Board archived");
+      await load();
+      onChanged();
+    } catch (error) { boardError(error, "Couldn't archive the board"); }
+    finally { setBusyId(null); }
+  };
+
   const moveBoard = async (workspace, index, direction) => {
     const reordered = [...boards[workspace.id]];
     const target = index + direction;
@@ -144,13 +156,12 @@ export default function WorkspaceManagerPanel({ onChanged, onDirty, onBusy }) {
     }
   };
 
-  const setArchived = async (workspace, archived) => {
-    if (archived && !window.confirm(`Archive ${workspace.name}? Its work remains stored, but the workspace will leave normal navigation.`)) return;
+  const archiveWorkspace = async (workspace) => {
+    if (!window.confirm(`Archive ${workspace.name}? Its work remains stored, but the workspace will leave normal navigation.`)) return;
     setBusyId(workspace.id);
     try {
-      if (archived) await workApi.archiveWorkspace(workspace.slug);
-      else await workApi.restoreWorkspace(workspace.slug);
-      toast.success(archived ? "Workspace archived" : "Workspace restored");
+      await workApi.archiveWorkspace(workspace.slug);
+      toast.success("Workspace archived");
       await load();
       onChanged();
     } catch (error) {
@@ -161,7 +172,7 @@ export default function WorkspaceManagerPanel({ onChanged, onDirty, onBusy }) {
   };
 
   const move = async (workspace, direction) => {
-    const active = workspaces.filter((candidate) => !candidate.archived);
+    const active = workspaces;
     const index = active.findIndex((candidate) => candidate.id === workspace.id);
     const target = index + direction;
     if (target < 0 || target >= active.length) return;
@@ -170,7 +181,7 @@ export default function WorkspaceManagerPanel({ onChanged, onDirty, onBusy }) {
     setBusyId("order");
     try {
       const { data } = await workApi.reorderWorkspaces(reordered.map((candidate) => candidate.id));
-      setWorkspaces([...data, ...workspaces.filter((candidate) => candidate.archived)]);
+      setWorkspaces(data);
       toast.success("Workspace order saved");
       onChanged();
     } catch (error) {
@@ -182,8 +193,7 @@ export default function WorkspaceManagerPanel({ onChanged, onDirty, onBusy }) {
 
   if (loading && workspaces.length === 0) return <p className="text-sm text-muted">Loading workspaces…</p>;
 
-  const active = workspaces.filter((workspace) => !workspace.archived);
-  const archived = workspaces.filter((workspace) => workspace.archived);
+  const active = workspaces;
 
   return (
     <div className="space-y-6">
@@ -226,7 +236,7 @@ export default function WorkspaceManagerPanel({ onChanged, onDirty, onBusy }) {
                 </div>
                 <div className="flex gap-2">
                   <Button variant="secondary" disabled={Boolean(busyId) || names[workspace.id]?.trim() === workspace.name} onClick={() => saveName(workspace)}>Save</Button>
-                  <Button variant="danger" disabled={Boolean(busyId)} onClick={() => setArchived(workspace, true)}><Archive className="h-4 w-4" /> Archive</Button>
+                  <Button variant="danger" disabled={Boolean(busyId)} onClick={() => archiveWorkspace(workspace)}><Archive className="h-4 w-4" /> Archive</Button>
                 </div>
               </div>
               <p className="mt-2 font-mono text-[10px] text-muted">/{workspace.slug}</p>
@@ -239,6 +249,7 @@ export default function WorkspaceManagerPanel({ onChanged, onDirty, onBusy }) {
                     <Button size="icon" variant="secondary" disabled={Boolean(busyId) || boardIndex === 0} onClick={() => moveBoard(workspace, boardIndex, -1)} aria-label={`Move ${board.name} up`}><ArrowUp className="h-4 w-4" /></Button>
                     <Button size="icon" variant="secondary" disabled={Boolean(busyId) || boardIndex === list.length - 1} onClick={() => moveBoard(workspace, boardIndex, 1)} aria-label={`Move ${board.name} down`}><ArrowDown className="h-4 w-4" /></Button>
                     {boardNames[board.id] !== board.name && <><Button variant="secondary" disabled={Boolean(busyId) || !boardNames[board.id]?.trim()} onClick={() => renameBoard(workspace, board)}>Save</Button><Button variant="secondary" onClick={() => setBoardNames((current) => ({ ...current, [board.id]: board.name }))}>Cancel</Button></>}
+                    <Button size="icon" variant="secondary" disabled={Boolean(busyId)} onClick={() => archiveBoard(workspace, board)} aria-label={`Archive ${board.name}`} title="Archive board and preserve its work"><Archive className="h-4 w-4" /></Button>
                     <Button size="icon" variant="danger" disabled={Boolean(busyId) || list.length === 1 || board.work_item_count > 0 || board.request_count > 0} title={board.work_item_count > 0 ? "Move work items manually before deleting this board" : board.request_count > 0 ? "This board is used by requests" : list.length === 1 ? "A workspace needs one board" : "Delete empty board"} onClick={() => deleteBoard(workspace, board)} aria-label={`Delete ${board.name}`}><Trash2 className="h-4 w-4" /></Button>
                   </div>)}
                   <div className="flex flex-wrap gap-2"><Input className="min-w-32 flex-1" aria-label={`New board in ${workspace.name}`} placeholder="New board name" value={newBoards[workspace.id] || ""} onChange={(event) => setNewBoards((current) => ({ ...current, [workspace.id]: event.target.value }))} /><Button variant="secondary" disabled={Boolean(busyId) || !newBoards[workspace.id]?.trim()} onClick={() => addBoard(workspace)}>Add board</Button>{newBoards[workspace.id] && <Button variant="secondary" onClick={() => setNewBoards((current) => ({ ...current, [workspace.id]: "" }))}>Cancel</Button>}</div>
@@ -249,22 +260,6 @@ export default function WorkspaceManagerPanel({ onChanged, onDirty, onBusy }) {
         </div>
       </div>
 
-      {archived.length > 0 && (
-        <div>
-          <h3 className="mb-3 text-sm font-extrabold text-ink">Archived</h3>
-          <div className="space-y-2">
-            {archived.map((workspace) => (
-              <Panel key={workspace.id} className="flex items-center justify-between gap-3 p-4">
-                <div>
-                  <p className="text-sm font-bold text-copy">{workspace.name}</p>
-                  <p className="font-mono text-[10px] text-muted">/{workspace.slug}</p>
-                </div>
-                <Button variant="secondary" disabled={Boolean(busyId)} onClick={() => setArchived(workspace, false)}><RotateCcw className="h-4 w-4" /> Restore</Button>
-              </Panel>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

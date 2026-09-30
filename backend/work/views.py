@@ -46,9 +46,8 @@ class WorkspaceViewSet(
     def get_queryset(self):
         queryset = super().get_queryset()
         if is_admin(self.request.user):
-            if self.action == "list" and self.request.query_params.get("include_archived") != "true":
-                return queryset.filter(archived=False)
-            return queryset
+            if self.action in ("archive", "restore", "archive_board", "restore_board"):
+                return queryset
         return queryset.filter(archived=False)
 
     def get_serializer_class(self):
@@ -127,6 +126,28 @@ class WorkspaceViewSet(
             raise ValidationError({"detail": "A workspace must keep at least one board."})
         board.delete()
         return Response(self.board_data(workspace))
+
+    @action(detail=True, methods=["post"], url_path=r"boards/(?P<board_id>\d+)/archive")
+    @transaction.atomic
+    def archive_board(self, request, slug=None, board_id=None):
+        self.require_admin()
+        workspace = Workspace.objects.select_for_update().get(pk=self.get_object().pk)
+        board = get_object_or_404(WorkGroup.objects.select_for_update(), pk=board_id, workspace=workspace)
+        if not board.archived:
+            board.archived = True
+            board.save(update_fields=("archived",))
+        return Response({"id": board.pk, "archived": board.archived})
+
+    @action(detail=True, methods=["post"], url_path=r"boards/(?P<board_id>\d+)/restore")
+    @transaction.atomic
+    def restore_board(self, request, slug=None, board_id=None):
+        self.require_admin()
+        workspace = Workspace.objects.select_for_update().get(pk=self.get_object().pk)
+        board = get_object_or_404(WorkGroup.objects.select_for_update(), pk=board_id, workspace=workspace)
+        if board.archived:
+            board.archived = False
+            board.save(update_fields=("archived",))
+        return Response({"id": board.pk, "archived": board.archived})
 
     @action(detail=True, methods=["post"], url_path="boards/reorder")
     @transaction.atomic
@@ -260,6 +281,30 @@ class WorkItemViewSet(
             )
 
         return queryset.order_by("-created_at", "-pk")
+
+    @action(detail=True, methods=["post"])
+    @transaction.atomic
+    def archive(self, request, pk=None):
+        if not is_admin(request.user):
+            raise PermissionDenied("Only administrators can archive work items.")
+        item = get_object_or_404(WorkItem.objects.select_for_update(), pk=pk)
+        if not item.archived:
+            item.archived = True
+            item.save(update_fields=("archived", "updated_at"))
+            record_activity(item, request.user, "archived")
+        return Response({"id": item.pk, "archived": item.archived})
+
+    @action(detail=True, methods=["post"])
+    @transaction.atomic
+    def restore(self, request, pk=None):
+        if not is_admin(request.user):
+            raise PermissionDenied("Only administrators can restore work items.")
+        item = get_object_or_404(WorkItem.objects.select_for_update(), pk=pk)
+        if item.archived:
+            item.archived = False
+            item.save(update_fields=("archived", "updated_at"))
+            record_activity(item, request.user, "restored")
+        return Response({"id": item.pk, "archived": item.archived})
 
     @transaction.atomic
     def perform_create(self, serializer):

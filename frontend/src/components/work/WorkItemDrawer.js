@@ -149,7 +149,7 @@ export default function WorkItemDrawer({ children }) {
       ? ["Request", "Submitted details, triage and delivery outcome"]
     : titles[drawer] || ["Panel", ""];
   return (
-    <WorkItemContext.Provider value={{ revision, requestRevision, workspaceRevision, workspaces, workspaceLoadError, retryWorkspaces: () => setWorkspaceRetry((value) => value + 1), unreadCount: inbox.unread_count }}>
+    <WorkItemContext.Provider value={{ revision, requestRevision, workspaceRevision, workspaces, workspaceLoadError, retryWorkspaces: () => setWorkspaceRetry((value) => value + 1), refreshWorkspaces: () => setWorkspaceRevision((value) => value + 1), unreadCount: inbox.unread_count }}>
       {children}
       <Dialog.Root open={Boolean(itemId || requestId || drawer)} onOpenChange={(open) => { if (!open) close(); }}>
         <Dialog.Portal>
@@ -171,6 +171,7 @@ export default function WorkItemDrawer({ children }) {
               {adminDrawerBlocked && <p role="status" className="text-sm text-muted">This action is available to administrators.</p>}
               {itemId && <WorkItemPanel key={itemId} itemId={itemId}
                 onChanged={() => setRevision((value) => value + 1)}
+                onArchived={close}
                 onDirty={setDirty}
                 onBusy={setBusy} drawer />}
               {!itemId && requestId && <RequestDetailPanel key={requestId} requestId={requestId}

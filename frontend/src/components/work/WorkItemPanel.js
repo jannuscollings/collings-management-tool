@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
-import { Link } from "react-router-dom";
-import { Check, ExternalLink, Loader2, Pencil, Plus, X } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Archive, Check, ExternalLink, Loader2, Pencil, Plus, X } from "lucide-react";
 import WorkDiscussion from "./WorkDiscussion";
 import toast from "react-hot-toast";
 import { workApi, WORK_STATUS_OPTIONS, WORK_PRIORITY_OPTIONS } from "../../api/work";
@@ -28,6 +28,7 @@ const activityLabels = {
   title_changed: "Updated title", brief_changed: "Updated brief", group_id_changed: "Moved group",
   sub_work_created: "Created sub-work", sub_work_updated: "Updated sub-work", sub_work_completed: "Completed sub-work",
   sub_work_reopened: "Reopened sub-work", comment_added: "Added an update", link_added: "Added a link", link_removed: "Removed a link",
+  archived: "Archived this work item", restored: "Restored this work item",
 };
 function Identity({ person }) {
   const name = person?.display_name || "Unassigned";
@@ -84,8 +85,9 @@ function SubWorkRow({ sub, users, manage, userId, busy, onSave, onDraftDirty }) 
   </li>;
 }
 
-export default function WorkItemPanel({ itemId, expectedWorkspace, drawer, onChanged, onDirty, onBusy }) {
+export default function WorkItemPanel({ itemId, expectedWorkspace, drawer, onChanged, onArchived, onDirty, onBusy }) {
   const user = useSelector((state) => state.auth.user);
+  const navigate = useNavigate();
   const [item, setItem] = useState(null);
   const [groups, setGroups] = useState([]);
   const [users, setUsers] = useState([]);
@@ -159,6 +161,19 @@ export default function WorkItemPanel({ itemId, expectedWorkspace, drawer, onCha
     } catch (failure) { const message = errorMessage(failure); setError(message); toast.error(message); return false; }
     finally { setBusy(false); onBusy?.(false); }
   };
+  const archiveItem = async () => {
+    if (busy || draftDirty || editing || !window.confirm(`Archive ${item.reference}? Its work and history will be preserved.`)) return;
+    setBusy(true); onBusy?.(true);
+    try {
+      await workApi.archiveItem(itemId);
+      onChanged?.();
+      toast.success(`${item.reference} archived`);
+      onBusy?.(false);
+      if (drawer) onArchived?.();
+      else navigate(`/workspaces/${item.workspace_slug}`);
+    } catch (failure) { const message = errorMessage(failure); setError(message); toast.error(message); }
+    finally { setBusy(false); onBusy?.(false); }
+  };
   if (loading) return <div role="status" className="flex items-center gap-2 py-12 text-sm text-muted"><Loader2 className="h-4 w-4 animate-spin" /> Loading work item…</div>;
   if (!item) return <Panel className="p-6"><p role="alert" className="text-sm text-critical">{error}</p><Button className="mt-4" variant="secondary" onClick={() => setRetry((value) => value+1)}>Try again</Button></Panel>;
   const permissions = item.permissions;
@@ -168,6 +183,7 @@ export default function WorkItemPanel({ itemId, expectedWorkspace, drawer, onCha
       <h1 className="mt-3 break-words text-2xl font-extrabold leading-tight tracking-tight text-ink">{item.title}</h1>
       <p className="mt-2 break-words text-xs text-muted">{item.workspace_name} <span className="mx-1">/</span> {item.group_name}</p>
       <div className="mt-4 flex flex-wrap gap-2"><Badge variant={statusVariants[item.status]}>{statusLabel(item.status)}</Badge><Badge variant={item.priority === 'high' ? 'warning' : 'neutral'} className="capitalize">{item.priority} priority</Badge>{busy && <span role="status" className="text-xs text-brand-strong">Saving…</span>}</div>
+      {permissions.manage && <Button variant="secondary" className="mt-4 min-h-11 shell:min-h-[38px]" disabled={busy || draftDirty || editing} onClick={archiveItem}><Archive className="h-4 w-4" /> Archive work item</Button>}
     </header>
     {error && <Panel role="alert" className="border-critical/30 p-4 text-sm text-critical">{error}</Panel>}
     {item.outstanding_review_feedback && <Panel className="border-warning/40 p-4 shell:p-5">

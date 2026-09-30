@@ -144,7 +144,9 @@ export default function RequestDetailPanel({ requestId, drawer = false, onChange
       <p className="mt-1 break-all text-xs text-copy shell:break-words">Destination: {[result.workspace_name, result.group_name].filter(Boolean).join(" / ") || "Not available"}</p>
       {request.can_view_resulting_work_item
         ? <Button asChild className="mt-4 min-h-11 shell:min-h-[38px]"><Link to={`/workspaces/${result.workspace_slug}/items/${result.id}`}>Open {result.reference} <ExternalLink className="h-4 w-4" /></Link></Button>
-        : <p className="mt-3 text-xs text-copy">This work item is available to its assigned delivery team.</p>}
+        : <p className="mt-3 text-xs text-copy">{request.resulting_work_item_archived
+          ? "This work item is archived and unavailable in active work. An administrator can restore it from Archive."
+          : "This work item is available to its assigned delivery team."}</p>}
     </Panel>}
 
     {isAdmin && !terminal && <Panel className="p-5 sm:p-6">

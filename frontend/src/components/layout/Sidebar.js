@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { Briefcase, Inbox, Layers3, Settings2, Ticket } from "lucide-react";
+import { Archive, Briefcase, Inbox, Layers3, Settings2, Ticket } from "lucide-react";
 
 import { cn } from "../../lib/cn";
 import { useSelector } from "react-redux";
@@ -71,6 +71,9 @@ export default function Sidebar() {
             {workspaceLoadError && <button type="button" onClick={retryWorkspaces} className="px-3 py-2 text-left text-xs font-semibold text-brand-strong">Reload workspaces</button>}
           </div>
         </div>
+        {user?.is_staff && <NavLink to="/archive" className={navItemClass}>
+          <Archive className="h-4 w-4" aria-hidden="true" />Archive
+        </NavLink>}
         <div className="mb-3">
           <p className="px-2.5 pb-1.5 pt-2 text-[9px] font-extrabold uppercase tracking-[0.14em] text-muted">Demo</p>
           <NavLink to="/demo" end className={navItemClass}>

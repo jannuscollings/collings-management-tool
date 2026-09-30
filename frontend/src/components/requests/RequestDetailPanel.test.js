@@ -116,6 +116,18 @@ test("accepted request shows reference and destination without a misleading link
   expect(screen.getByText("This work item is available to its assigned delivery team.")).toBeInTheDocument();
 });
 
+test("archived result keeps its reference and explains recovery without an Open action", async () => {
+  workRequestsApi.get.mockResolvedValue({ data: {
+    ...request, status: "accepted", status_label: "Accepted", can_view_resulting_work_item: false,
+    resulting_work_item_archived: true,
+    resulting_work_item_detail: { id: 4, reference: "WI-000004", group_name: "Production", workspace_name: "Creative & Design", workspace_slug: "creative-design" },
+  } });
+  render(<MemoryRouter><RequestDetailPanel requestId={3} /></MemoryRouter>);
+  expect(await screen.findByText("WI-000004")).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: /Open WI-000004/ })).not.toBeInTheDocument();
+  expect(screen.getByText(/archived and unavailable in active work/)).toBeInTheDocument();
+});
+
 test("returning a changed field to its persisted value restores acceptance", async () => {
   render(<MemoryRouter><RequestDetailPanel requestId={3} /></MemoryRouter>);
   const accept = await screen.findByRole("button", { name: "Accept request" });

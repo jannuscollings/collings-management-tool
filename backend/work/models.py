@@ -53,6 +53,7 @@ class WorkItem(models.Model):
         HIGH = "high", "High"
 
     reference = models.CharField(max_length=20, unique=True, null=True, editable=False)
+    archived = models.BooleanField(default=False)
     group = models.ForeignKey(
         WorkGroup,
         on_delete=models.PROTECT,

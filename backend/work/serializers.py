@@ -54,6 +54,7 @@ class WorkItemSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "reference",
+            "archived",
             "group",
             "group_name",
             "workspace_slug",
@@ -76,6 +77,7 @@ class WorkItemSerializer(serializers.ModelSerializer):
         read_only_fields = (
             "id",
             "reference",
+            "archived",
             "group_name",
             "workspace_slug",
             "workspace_name",

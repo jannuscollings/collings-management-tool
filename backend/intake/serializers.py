@@ -31,6 +31,7 @@ class WorkRequestSerializer(serializers.ModelSerializer):
     accepted_by_detail = WorkUserSerializer(source="accepted_by", read_only=True)
     rejected_by_detail = WorkUserSerializer(source="rejected_by", read_only=True)
     can_view_resulting_work_item = serializers.SerializerMethodField()
+    resulting_work_item_archived = serializers.SerializerMethodField()
     resulting_work_item_detail = ResultingWorkItemSerializer(
         source="resulting_work_item",
         read_only=True,
@@ -67,6 +68,7 @@ class WorkRequestSerializer(serializers.ModelSerializer):
             "rejected_by_detail",
             "rejected_at",
             "can_view_resulting_work_item",
+            "resulting_work_item_archived",
             "created_at",
             "updated_at",
         )
@@ -79,6 +81,10 @@ class WorkRequestSerializer(serializers.ModelSerializer):
         return visible_items(
             WorkItem.objects.filter(pk=obj.resulting_work_item_id), request.user
         ).exists()
+
+    def get_resulting_work_item_archived(self, obj):
+        item = obj.resulting_work_item
+        return bool(item and (item.archived or item.group.archived or item.group.workspace.archived))
 
 
 class WorkRequestRejectSerializer(serializers.Serializer):
