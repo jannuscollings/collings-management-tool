@@ -2,6 +2,8 @@ from rest_framework import serializers
 
 from work.models import WorkGroup
 from work.serializers import WorkUserSerializer
+from work.access import visible_items
+from work.models import WorkItem
 
 from .models import WorkRequest
 
@@ -11,6 +13,7 @@ class ResultingWorkItemSerializer(serializers.Serializer):
     reference = serializers.CharField(read_only=True)
     title = serializers.CharField(read_only=True)
     group_name = serializers.CharField(source="group.name", read_only=True)
+    workspace_name = serializers.CharField(source="group.workspace.name", read_only=True)
     workspace_slug = serializers.CharField(source="group.workspace.slug", read_only=True)
 
 
@@ -26,6 +29,8 @@ class WorkRequestSerializer(serializers.ModelSerializer):
     owner_detail = WorkUserSerializer(source="owner", read_only=True)
     reviewer_detail = WorkUserSerializer(source="reviewer", read_only=True)
     accepted_by_detail = WorkUserSerializer(source="accepted_by", read_only=True)
+    rejected_by_detail = WorkUserSerializer(source="rejected_by", read_only=True)
+    can_view_resulting_work_item = serializers.SerializerMethodField()
     resulting_work_item_detail = ResultingWorkItemSerializer(
         source="resulting_work_item",
         read_only=True,
@@ -58,10 +63,26 @@ class WorkRequestSerializer(serializers.ModelSerializer):
             "resulting_work_item_detail",
             "accepted_by_detail",
             "accepted_at",
+            "rejection_reason",
+            "rejected_by_detail",
+            "rejected_at",
+            "can_view_resulting_work_item",
             "created_at",
             "updated_at",
         )
         read_only_fields = fields
+
+    def get_can_view_resulting_work_item(self, obj):
+        request = self.context.get("request")
+        if not request or not obj.resulting_work_item_id:
+            return False
+        return visible_items(
+            WorkItem.objects.filter(pk=obj.resulting_work_item_id), request.user
+        ).exists()
+
+
+class WorkRequestRejectSerializer(serializers.Serializer):
+    rejection_reason = serializers.CharField(max_length=300, trim_whitespace=True)
 
 
 class WorkRequestWriteSerializer(serializers.ModelSerializer):

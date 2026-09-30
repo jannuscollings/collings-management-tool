@@ -41,9 +41,9 @@ class HomeView(APIView):
         }
         if is_admin(request.user):
             from intake.models import WorkRequest
-            queue = WorkRequest.objects.filter(status='new')
+            queue = WorkRequest.objects.filter(status__in=(WorkRequest.Status.NEW, WorkRequest.Status.TRIAGING))
             result['triage'] = {'count': queue.count(), 'items': list(queue.order_by('created_at', 'pk').values(
-                'id', 'reference', 'title', 'created_at')[:12])}
+                'id', 'reference', 'title', 'status', 'created_at')[:12])}
         return Response(result)
 
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import { ExternalLink } from "lucide-react";
 
@@ -8,7 +8,7 @@ import { REQUEST_PRIORITY_OPTIONS, workRequestsApi } from "../../api/workRequest
 import { workApi } from "../../api/work";
 import Badge from "../ui/Badge";
 import { Button } from "../ui/Button";
-import { Field, Input, Select } from "../ui/Field";
+import { Field, Input, Select, Textarea } from "../ui/Field";
 import PageHeader from "../ui/PageHeader";
 import Panel from "../ui/Panel";
 
@@ -24,7 +24,6 @@ const triageDiffers = (triage, request) => TRIAGE_FIELDS.some(
 );
 
 export default function RequestDetailPanel({ requestId, drawer = false, onChanged = noop, onDirty = noop, onBusy = noop }) {
-  const location = useLocation();
   const isAdmin = useSelector((state) => state.auth.user?.is_staff);
   const [request, setRequest] = useState(null);
   const [groups, setGroups] = useState([]);
@@ -32,6 +31,7 @@ export default function RequestDetailPanel({ requestId, drawer = false, onChange
   const [triage, setTriage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -102,10 +102,12 @@ export default function RequestDetailPanel({ requestId, drawer = false, onChange
   };
 
   const reject = async () => {
+    const reason = rejectionReason.trim();
+    if (!reason || saving) return;
     if (!window.confirm("Reject this request? This cannot be undone in this version.")) return;
     setSaving(true);
     try {
-      const { data } = await workRequestsApi.reject(requestId);
+      const { data } = await workRequestsApi.reject(requestId, { rejection_reason: reason });
       setRequest(data);
       onDirty(false);
       onChanged();
@@ -120,9 +122,6 @@ export default function RequestDetailPanel({ requestId, drawer = false, onChange
 
   const terminal = request.status === "accepted" || request.status === "rejected";
   const result = request.resulting_work_item_detail;
-  const resultQuery = new URLSearchParams(location.search);
-  resultQuery.delete("request");
-  resultQuery.set("item", result?.id || "");
 
   return <div className="min-w-0 space-y-5 pb-16 shell:pb-0">
     {drawer && <div className="flex justify-end"><Link to={`/requests/${request.id}`} className="inline-flex min-h-11 items-center gap-1 text-xs font-bold text-brand-strong shell:min-h-0">Full page <ExternalLink className="h-3.5 w-3.5" /></Link></div>}
@@ -140,8 +139,12 @@ export default function RequestDetailPanel({ requestId, drawer = false, onChange
     </Panel>
 
     {result && <Panel className="border-positive/30 bg-emerald-50/70 p-5 dark:bg-emerald-950/20 sm:p-6">
-      <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-positive">Accepted</p><h2 className="mt-1 text-lg font-extrabold text-ink">Resulting work item</h2><p className="mt-1 break-all text-xs text-copy shell:break-words">This request was accepted into {result.group_name}.</p>
-      <Button asChild className="mt-4 min-h-11 shell:min-h-[38px]">{drawer ? <Link to={{ pathname: location.pathname, search: resultQuery.toString() }}>Open {result.reference} <ExternalLink className="h-4 w-4" /></Link> : <Link to={`/workspaces/${result.workspace_slug}/items/${result.id}`}>Open {result.reference} <ExternalLink className="h-4 w-4" /></Link>}</Button>
+      <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-positive">Accepted</p><h2 className="mt-1 text-lg font-extrabold text-ink">Resulting work item</h2>
+      <p className="mt-1 break-all text-sm font-bold text-ink shell:break-words">{result.reference}</p>
+      <p className="mt-1 break-all text-xs text-copy shell:break-words">Destination: {[result.workspace_name, result.group_name].filter(Boolean).join(" / ") || "Not available"}</p>
+      {request.can_view_resulting_work_item
+        ? <Button asChild className="mt-4 min-h-11 shell:min-h-[38px]"><Link to={`/workspaces/${result.workspace_slug}/items/${result.id}`}>Open {result.reference} <ExternalLink className="h-4 w-4" /></Link></Button>
+        : <p className="mt-3 text-xs text-copy">This work item is available to its assigned delivery team.</p>}
     </Panel>}
 
     {isAdmin && !terminal && <Panel className="p-5 sm:p-6">
@@ -152,11 +155,12 @@ export default function RequestDetailPanel({ requestId, drawer = false, onChange
         <Field label="Due-date override" hint={request.requested_due_date ? `Requested date: ${request.requested_due_date}` : "No date requested"}><Input type="date" value={triage.triage_due_date} onChange={updateTriage("triage_due_date")} /></Field>
         <Field label="Owner"><Select value={triage.owner} onChange={updateTriage("owner")}><option value="">Unassigned</option>{users.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</Select></Field>
         <Field label="Reviewer"><Select value={triage.reviewer} onChange={updateTriage("reviewer")}><option value="">Unassigned</option>{users.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</Select></Field>
-        <div className="flex flex-wrap gap-2 sm:col-span-2"><Button type="submit" variant="secondary" disabled={saving} className="min-h-11 shell:min-h-[38px]">{saving ? "Saving…" : "Save triage"}</Button><Button type="button" variant="dark" onClick={accept} disabled={saving || request.status !== "triaging" || hasUnsavedTriage} className="min-h-11 shell:min-h-[38px]">Accept request</Button><Button type="button" variant="danger" onClick={reject} disabled={saving} className="min-h-11 shell:min-h-[38px]">Reject request</Button></div>
+        <Field label="Rejection reason" hint="Required only when rejecting. Keep it brief (300 characters maximum)." className="sm:col-span-2"><Textarea value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)} maxLength={300} rows={2} /></Field>
+        <div className="flex flex-wrap gap-2 sm:col-span-2"><Button type="submit" variant="secondary" disabled={saving} className="min-h-11 shell:min-h-[38px]">{saving ? "Saving…" : "Save triage"}</Button><Button type="button" variant="dark" onClick={accept} disabled={saving || request.status !== "triaging" || hasUnsavedTriage} className="min-h-11 shell:min-h-[38px]">Accept request</Button><Button type="button" variant="danger" onClick={reject} disabled={saving || !rejectionReason.trim()} className="min-h-11 shell:min-h-[38px]">Reject request</Button></div>
         {request.status === "new" && <p className="text-xs text-muted sm:col-span-2">Save triage before accepting the request.</p>}
         {request.status === "triaging" && hasUnsavedTriage && <p role="status" className="text-xs text-muted sm:col-span-2">Save triage before accepting the request.</p>}
       </form>
     </Panel>}
-    {request.status === "rejected" && <Panel className="border-critical/25 bg-red-50/60 p-5 text-sm dark:bg-red-950/20 sm:p-6"><h2 className="font-extrabold text-ink">Request rejected</h2><p className="mt-1 text-copy">This request is closed and cannot be edited or accepted.</p></Panel>}
+    {request.status === "rejected" && <Panel className="border-critical/25 bg-red-50/60 p-5 text-sm dark:bg-red-950/20 sm:p-6"><h2 className="font-extrabold text-ink">Request rejected</h2><p className="mt-2 text-xs font-bold uppercase tracking-wide text-muted">Reason</p><p className="mt-1 whitespace-pre-wrap break-words text-copy">{request.rejection_reason || "No reason recorded."}</p><p className="mt-3 text-xs text-muted">This request is closed and cannot be edited or accepted.</p></Panel>}
   </div>;
 }

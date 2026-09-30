@@ -1,5 +1,6 @@
 from django.db import transaction
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -13,6 +14,7 @@ from .serializers import (
     WorkRequestSerializer,
     WorkRequestTriageSerializer,
     WorkRequestWriteSerializer,
+    WorkRequestRejectSerializer,
 )
 from .services import RequestAcceptanceError, accept_work_request
 
@@ -34,6 +36,7 @@ class WorkRequestViewSet(
         "resulting_work_item__group",
         "resulting_work_item__group__workspace",
         "accepted_by",
+        "rejected_by",
     )
 
     def initial(self, request, *args, **kwargs):
@@ -55,6 +58,8 @@ class WorkRequestViewSet(
             return WorkRequestWriteSerializer
         if self.action == "triage":
             return WorkRequestTriageSerializer
+        if self.action == "reject":
+            return WorkRequestRejectSerializer
         return WorkRequestSerializer
 
     def perform_create(self, serializer):
@@ -134,7 +139,12 @@ class WorkRequestViewSet(
                 {"detail": "A request with a work item cannot be rejected."},
                 status=status.HTTP_409_CONFLICT,
             )
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         work_request.status = WorkRequest.Status.REJECTED
-        work_request.save(update_fields=("status", "updated_at"))
+        work_request.rejection_reason = serializer.validated_data["rejection_reason"]
+        work_request.rejected_by = request.user
+        work_request.rejected_at = timezone.now()
+        work_request.save(update_fields=("status", "rejection_reason", "rejected_by", "rejected_at", "updated_at"))
         notify(request.user, work_request.submitted_by_id, "request_rejected", work_request=work_request)
         return Response(WorkRequestSerializer(work_request, context=self.get_serializer_context()).data)

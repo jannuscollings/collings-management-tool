@@ -35,6 +35,12 @@ class AwarenessTests(TestCase):
         self.assertNotIn(hidden.pk, [x['id'] for x in response.data['recent']['items']])
         self.client.force_authenticate(self.admin)
         self.assertEqual(self.client.get('/api/home/').data['triage']['count'], 1)
+        triaging = WorkRequest.objects.create(title='Already triaging', submitted_by=self.owner, status=WorkRequest.Status.TRIAGING)
+        queue = self.client.get('/api/home/').data['triage']
+        self.assertEqual(queue['count'], 2)
+        self.assertEqual({item['id']: item['status'] for item in queue['items']}, {
+            self.request.pk: WorkRequest.Status.NEW, triaging.pk: WorkRequest.Status.TRIAGING,
+        })
         self.group.archived = True
         self.group.save()
         self.client.force_authenticate(self.owner)
@@ -221,7 +227,7 @@ class AwarenessTests(TestCase):
 
     def test_request_outcomes_and_bulk_read_are_recipient_scoped(self):
         url = f'/api/requests/{self.request.pk}/'
-        response = self.client.post(url+'reject/')
+        response = self.client.post(url+'reject/', {'rejection_reason': 'Not needed for this campaign.'})
         self.assertEqual(response.status_code, 200)
         notification = Notification.objects.get(event='request_rejected')
         self.client.force_authenticate(self.owner)

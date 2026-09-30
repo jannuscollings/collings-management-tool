@@ -14,7 +14,7 @@ const sections = [
   ['due_soon', 'Due soon · next 3 days', 'warning', 'soon'], ['review', 'Awaiting my review', 'review'],
   ['changes_requested', 'Changes requested from me', 'warning'],
   ['my_open', 'My open work', 'neutral'],
-  ['recent', 'Recently updated · last 7 days', 'neutral'], ['triage', 'New requests requiring triage', 'brand'],
+  ['recent', 'Recently updated · last 7 days', 'neutral'], ['triage', 'Requests requiring attention', 'brand'],
 ];
 export default function HomePage() {
   const { revision, requestRevision, workspaceRevision } = useWorkItemContext();
@@ -45,6 +45,7 @@ export default function HomePage() {
               <TargetLink {...(key === 'triage' ? { request: item } : { item })} className="block min-h-11 min-w-0 font-bold text-ink hover:text-brand-strong shell:min-h-0">
                 <span className="block font-mono text-[10px] text-muted shell:inline shell:font-sans shell:text-xs shell:text-ink">{item.reference}</span><span className="hidden shell:inline"> · </span><span className="block break-all shell:inline shell:break-words">{item.title}</span>
               </TargetLink>
+              {key === 'triage' && <Badge variant={item.status === 'triaging' ? 'warning' : 'info'}>{item.status === 'triaging' ? 'Triaging' : 'New'}</Badge>}
               {key !== 'triage' && <div className="mt-1 flex flex-wrap items-center gap-2 break-words text-muted">
                 <span className="min-w-0 break-all shell:break-words">{item.group__workspace__name}</span><span>{item.priority} priority</span>
                 <DueDate item={item} today={data.today} prefix="Due " empty="No due date" />

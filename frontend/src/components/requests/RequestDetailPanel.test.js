@@ -9,12 +9,12 @@ let mockIsAdmin = true;
 jest.mock("react-redux", () => ({ useSelector: (selector) => selector({ auth: { user: { is_staff: mockIsAdmin } } }) }));
 jest.mock("../../api/workRequests", () => ({
   REQUEST_PRIORITY_OPTIONS: [["low", "Low"], ["medium", "Medium"], ["high", "High"]],
-  workRequestsApi: { get: jest.fn(), triage: jest.fn(), accept: jest.fn() },
+  workRequestsApi: { get: jest.fn(), triage: jest.fn(), accept: jest.fn(), reject: jest.fn() },
 }));
 jest.mock("../../api/work", () => ({ workApi: { listWorkspaces: jest.fn(), getWorkspace: jest.fn(), listUsers: jest.fn() } }));
 
 const request = {
-  id: 3, reference: "REQ-000003", title: "Campaign", status: "triaging", status_label: "Triaging",
+  id: 3, reference: "WR-000003", title: "Campaign", status: "triaging", status_label: "Triaging",
   created_at: "2026-09-28T00:00:00Z", request_type_label: "Creative & Design",
   submitted_by_detail: { display_name: "Requester" }, priority: "medium", requested_due_date: null,
   brief: "Campaign brief", destination_group: 1, triage_priority: null, triage_due_date: null,
@@ -56,7 +56,8 @@ test("accept stays disabled for changed triage until the visible values are save
   workRequestsApi.triage.mockResolvedValue({ data: saved });
   workRequestsApi.accept.mockResolvedValue({ data: {
     ...saved, status: "accepted", status_label: "Accepted",
-    resulting_work_item_detail: { id: 4, reference: "WI-000004", group_name: "Production", workspace_slug: "creative-design" },
+    can_view_resulting_work_item: true,
+    resulting_work_item_detail: { id: 4, reference: "WI-000004", group_name: "Production", workspace_name: "Creative & Design", workspace_slug: "creative-design" },
   } });
   render(<MemoryRouter><RequestDetailPanel requestId={3} /></MemoryRouter>);
 
@@ -77,6 +78,42 @@ test("accept stays disabled for changed triage until the visible values are save
   fireEvent.click(accept);
   await waitFor(() => expect(workRequestsApi.accept).toHaveBeenCalledWith(3));
   expect(await screen.findByText("Resulting work item")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /Open WI-000004/ })).toHaveAttribute("href", "/workspaces/creative-design/items/4");
+});
+
+test("rejection requires a reason and shows it to the requester", async () => {
+  const confirm = jest.spyOn(window, "confirm").mockReturnValue(true);
+  workRequestsApi.reject.mockResolvedValue({ data: {
+    ...request, status: "rejected", status_label: "Rejected", rejection_reason: "Use the current assets.",
+  } });
+  const { unmount } = render(<MemoryRouter><RequestDetailPanel requestId={3} /></MemoryRouter>);
+  const reject = await screen.findByRole("button", { name: "Reject request" });
+  expect(reject).toBeDisabled();
+  fireEvent.change(screen.getByRole("textbox", { name: /Rejection reason/ }), { target: { value: "  Use the current assets.  " } });
+  expect(reject).toBeEnabled();
+  fireEvent.click(reject);
+  await waitFor(() => expect(workRequestsApi.reject).toHaveBeenCalledWith(3, { rejection_reason: "Use the current assets." }));
+  expect(await screen.findByText("Use the current assets.")).toBeInTheDocument();
+  confirm.mockRestore();
+  unmount();
+  mockIsAdmin = false;
+  workRequestsApi.get.mockResolvedValue({ data: { ...request, status: "rejected", status_label: "Rejected", rejection_reason: "Use the current assets." } });
+  render(<MemoryRouter><RequestDetailPanel requestId={3} /></MemoryRouter>);
+  expect(await screen.findByText("Use the current assets.")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Reject request" })).not.toBeInTheDocument();
+});
+
+test("accepted request shows reference and destination without a misleading link when access is restricted", async () => {
+  mockIsAdmin = false;
+  workRequestsApi.get.mockResolvedValue({ data: {
+    ...request, status: "accepted", status_label: "Accepted", can_view_resulting_work_item: false,
+    resulting_work_item_detail: { id: 4, reference: "WI-000004", group_name: "Production", workspace_name: "Creative & Design", workspace_slug: "creative-design" },
+  } });
+  render(<MemoryRouter><RequestDetailPanel requestId={3} /></MemoryRouter>);
+  expect(await screen.findByText("WI-000004")).toBeInTheDocument();
+  expect(screen.getByText("Destination: Creative & Design / Production")).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: /Open WI-000004/ })).not.toBeInTheDocument();
+  expect(screen.getByText("This work item is available to its assigned delivery team.")).toBeInTheDocument();
 });
 
 test("returning a changed field to its persisted value restores acceptance", async () => {

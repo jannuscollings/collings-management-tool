@@ -277,7 +277,7 @@ class WorkRequestApiTests(TestCase):
         work_request = self.create_request()
         self.client.force_authenticate(self.triager)
 
-        rejected = self.client.post(f"/api/requests/{work_request.pk}/reject/")
+        rejected = self.client.post(f"/api/requests/{work_request.pk}/reject/", {"rejection_reason": "Outside this team's scope."}, format="json")
         accepted = self.client.post(f"/api/requests/{work_request.pk}/accept/")
         edited = self.client.patch(
             f"/api/requests/{work_request.pk}/",
@@ -289,6 +289,46 @@ class WorkRequestApiTests(TestCase):
         self.assertEqual(accepted.status_code, status.HTTP_409_CONFLICT)
         self.assertEqual(edited.status_code, status.HTTP_409_CONFLICT)
         self.assertEqual(WorkItem.objects.count(), 0)
+
+    def test_reject_requires_reason_and_persists_decision_for_requester(self):
+        work_request = self.create_request()
+        self.client.force_authenticate(self.triager)
+        missing = self.client.post(f"/api/requests/{work_request.pk}/reject/", {}, format="json")
+        blank = self.client.post(f"/api/requests/{work_request.pk}/reject/", {"rejection_reason": "   "}, format="json")
+        work_request.refresh_from_db()
+        self.assertEqual(missing.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(blank.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(work_request.status, WorkRequest.Status.NEW)
+
+        rejected = self.client.post(f"/api/requests/{work_request.pk}/reject/", {"rejection_reason": "  Please use the existing campaign assets.  "}, format="json")
+        work_request.refresh_from_db()
+        self.assertEqual(rejected.status_code, status.HTTP_200_OK)
+        self.assertEqual(work_request.rejection_reason, "Please use the existing campaign assets.")
+        self.assertEqual(work_request.rejected_by, self.triager)
+        self.assertIsNotNone(work_request.rejected_at)
+        self.client.force_authenticate(self.submitter)
+        detail = self.client.get(f"/api/requests/{work_request.pk}/")
+        self.assertEqual(detail.data["rejection_reason"], work_request.rejection_reason)
+        self.assertEqual(detail.data["rejected_by_detail"]["id"], self.triager.pk)
+        self.assertIsNotNone(detail.data["rejected_at"])
+
+    def test_accepted_handoff_exposes_context_but_only_links_visible_work_items(self):
+        work_request = self.triage_request(self.create_request())
+        accepted, _ = accept_work_request(work_request.pk, self.triager)
+        item = accepted.resulting_work_item
+        self.client.force_authenticate(self.submitter)
+        restricted = self.client.get(f"/api/requests/{work_request.pk}/")
+        self.assertEqual(restricted.data["resulting_work_item_detail"]["reference"], item.reference)
+        self.assertEqual(restricted.data["resulting_work_item_detail"]["group_name"], self.group.name)
+        self.assertEqual(restricted.data["resulting_work_item_detail"]["workspace_name"], self.workspace.name)
+        self.assertFalse(restricted.data["can_view_resulting_work_item"])
+        self.assertEqual(self.client.get(f"/api/work-items/{item.pk}/").status_code, status.HTTP_404_NOT_FOUND)
+
+        item.owner = self.submitter
+        item.save(update_fields=("owner",))
+        allowed = self.client.get(f"/api/requests/{work_request.pk}/")
+        self.assertTrue(allowed.data["can_view_resulting_work_item"])
+        self.assertEqual(self.client.get(f"/api/work-items/{item.pk}/").status_code, status.HTTP_200_OK)
 
     def test_accepted_request_cannot_be_edited_or_triaged(self):
         work_request = self.triage_request(self.create_request())

@@ -7,7 +7,7 @@ export const workRequestsApi = {
   update: (id, payload) => api.patch(`/api/requests/${id}/`, payload),
   triage: (id, payload) => api.post(`/api/requests/${id}/triage/`, payload),
   accept: (id) => api.post(`/api/requests/${id}/accept/`),
-  reject: (id) => api.post(`/api/requests/${id}/reject/`),
+  reject: (id, payload) => api.post(`/api/requests/${id}/reject/`, payload),
 };
 
 export const REQUEST_TYPE_OPTIONS = [["creative_design", "Creative & Design"]];
@@ -17,4 +17,3 @@ export const REQUEST_PRIORITY_OPTIONS = [
   ["medium", "Medium"],
   ["high", "High"],
 ];
-

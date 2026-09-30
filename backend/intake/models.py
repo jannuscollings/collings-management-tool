@@ -82,6 +82,15 @@ class WorkRequest(models.Model):
         blank=True,
     )
     accepted_at = models.DateTimeField(null=True, blank=True)
+    rejection_reason = models.CharField(max_length=300, blank=True)
+    rejected_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="rejected_work_requests",
+        null=True,
+        blank=True,
+    )
+    rejected_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -107,4 +116,3 @@ class WorkRequest(models.Model):
 
     def __str__(self):
         return f"{self.reference or 'New request'} {self.title}"
-

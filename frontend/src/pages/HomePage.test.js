@@ -18,13 +18,19 @@ test("Home keeps its work and triage links readable with mobile bottom clearance
     today: "2026-09-29",
     my_open: { count: 1, items: [{ id: 1, reference: "WI-000001", title: longTitle,
       group__workspace__name: longTitle, priority: "high", due_date: null, status: "new" }] },
-    triage: { count: 1, items: [{ id: 2, reference: "REQ-000002", title: "Needs triage" }] },
+    triage: { count: 2, items: [
+      { id: 2, reference: "WR-000002", title: "Needs triage", status: "new" },
+      { id: 3, reference: "WR-000003", title: "In triage", status: "triaging" },
+    ] },
   } });
   render(<MemoryRouter><HomePage /></MemoryRouter>);
   const workLink = await screen.findByRole("link", { name: /WI-000001/ });
   expect(workLink).toHaveAttribute("href", "/item");
   expect(within(workLink).getByText(longTitle)).toHaveClass("break-all", "shell:break-words");
   expect(screen.getByText("Needs triage").closest("a")).toHaveAttribute("href", "/request");
+  expect(screen.getByText("In triage").closest("a")).toHaveAttribute("href", "/request");
+  expect(screen.getByText("New")).toBeInTheDocument();
+  expect(screen.getByText("Triaging")).toBeInTheDocument();
   expect(screen.getByText("Home").closest("[class*='pb-16']")).toHaveClass("pb-16", "shell:pb-[34px]");
   expect(screen.getByRole("link", { name: /New request/ })).toBeInTheDocument();
 });
