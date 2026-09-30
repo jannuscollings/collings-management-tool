@@ -120,6 +120,7 @@ export default function WorkspaceKanban({
                   const isSaving = savingItemIds.has(item.id);
                   const isBeingDragged = draggedItemId === item.id;
                   const canMove = item.permissions?.statuses.length > 1;
+                  const needsReviewer = item.permissions?.edit && ["new", "in_progress"].includes(item.status) && !item.permissions?.statuses.includes("review");
                   return (
                     <article
                       key={item.id}
@@ -172,11 +173,12 @@ export default function WorkspaceKanban({
                             onChange={(event) => onMoveItem(item, event.target.value)}
                             className="min-h-[34px] py-1.5 text-[11px] normal-case tracking-normal"
                           >
-                            {WORK_STATUS_OPTIONS.filter(([value]) => item.permissions?.statuses.includes(value)).map(([value, statusLabel]) => (
-                              <option key={value} value={value}>{statusLabel}</option>
+                            {WORK_STATUS_OPTIONS.filter(([value]) => item.permissions?.statuses.includes(value) || (value === "review" && needsReviewer)).map(([value, statusLabel]) => (
+                              <option key={value} value={value} disabled={value === "review" && needsReviewer}>{statusLabel}</option>
                             ))}
                           </Select>
                         </label>
+                        {needsReviewer && <p className="mt-1 text-[10px] text-muted">Assign an active reviewer to submit for review.</p>}
                       </div>
                     </article>
                   );

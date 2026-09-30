@@ -76,6 +76,23 @@ class OperationsTests(TestCase):
         self.reviewer.save()
         self.assertEqual(self.as_user(self.owner).patch(self.url, {'status': 'review'}).status_code, 400)
 
+    def test_admin_status_patch_uses_review_submission_rules(self):
+        client = self.as_user(self.admin)
+        self.item.reviewer = None
+        self.item.save(update_fields=['reviewer'])
+        missing_reviewer = client.patch(self.url, {'status': 'review'})
+        self.assertEqual(missing_reviewer.status_code, 400)
+        self.assertIn('reviewer', missing_reviewer.data)
+        self.assertEqual(self.item.activity.filter(event='review_submitted').count(), 0)
+
+        self.item.reviewer = self.reviewer
+        self.item.save(update_fields=['reviewer'])
+        submitted = client.patch(self.url, {'status': 'review'})
+        self.assertEqual(submitted.status_code, 200)
+        self.assertEqual(submitted.data['status'], 'review')
+        self.assertEqual(self.item.activity.filter(event='review_submitted').count(), 1)
+        self.assertEqual(client.patch(self.url, {'status': 'done'}).status_code, 400)
+
     def test_outstanding_feedback_lifecycle_and_permissions(self):
         self.as_user(self.owner)
         self.assertEqual(self.client.patch(self.url, {'status': 'in_progress'}).status_code, 200)

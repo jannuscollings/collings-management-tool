@@ -27,10 +27,11 @@ export default function WorkspaceTableCell({ item, field, users, canEdit, busy, 
       <Input autoFocus aria-label={`Edit due date for ${item.reference}`} type="date" value={value} onChange={(event) => save(event.target.value || null)} onKeyDown={(event) => { if (event.key === "Escape") setEditing(false); }} onBlur={() => setEditing(false)} />
       {value && <button type="button" className="text-xs text-muted hover:text-copy" onMouseDown={(event) => event.preventDefault()} onClick={() => save(null)} aria-label={`Clear due date for ${item.reference}`}>Clear</button>}
     </span>;
-    const options = field === "status" ? WORK_STATUS_OPTIONS.filter(([key]) => item.permissions.statuses.includes(key))
+    const needsReviewer = field === "status" && ["new", "in_progress"].includes(item.status) && !item.permissions.statuses.includes("review");
+    const options = field === "status" ? WORK_STATUS_OPTIONS.filter(([key]) => item.permissions.statuses.includes(key) || (key === "review" && needsReviewer))
       : field === "priority" ? WORK_PRIORITY_OPTIONS
         : [["", "Unassigned"], ...users.map((user) => [String(user.id), user.display_name])];
-    return <Select autoFocus aria-label={`Edit ${field} for ${item.reference}`} value={String(value)} onChange={(event) => save(field === "owner" || field === "reviewer" ? (event.target.value ? Number(event.target.value) : null) : event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") setEditing(false); }} onBlur={() => setEditing(false)} className="min-w-[130px]">{options.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</Select>;
+    return <span className="inline-flex flex-col gap-1"><Select autoFocus aria-label={`Edit ${field} for ${item.reference}`} value={String(value)} onChange={(event) => save(field === "owner" || field === "reviewer" ? (event.target.value ? Number(event.target.value) : null) : event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") setEditing(false); }} onBlur={() => setEditing(false)} className="min-w-[130px]">{options.map(([key, label]) => <option key={key} value={key} disabled={key === "review" && needsReviewer}>{label}</option>)}</Select>{needsReviewer && <span className="text-[10px] text-muted">Assign an active reviewer to submit for review.</span>}</span>;
   }
   return <button type="button" className="rounded-ds-xs text-left hover:text-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30" onClick={() => setEditing(true)} aria-label={`Edit ${field} for ${item.reference}`}>{display}</button>;
 }

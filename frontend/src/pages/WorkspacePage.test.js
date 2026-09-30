@@ -1,11 +1,13 @@
 import "@testing-library/jest-dom";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 import WorkspacePage from "./WorkspacePage";
 import { workApi } from "../api/work";
 
 let mockUser = { is_staff: true };
 jest.mock("react-redux", () => ({ useSelector: (selector) => selector({ auth: { user: mockUser } }) }));
+jest.mock("react-hot-toast", () => ({ __esModule: true, default: { error: jest.fn(), success: jest.fn() } }));
 jest.mock("../api/work", () => ({
   WORK_STATUS_OPTIONS: [["new", "New"], ["in_progress", "In progress"], ["review", "Review"], ["done", "Done"]],
   WORK_PRIORITY_OPTIONS: [["low", "Low"], ["medium", "Medium"], ["high", "High"]],
@@ -91,6 +93,42 @@ test("review status offers no generic route to Done", async () => {
   await screen.findByRole("link", { name: "Zebra" });
   fireEvent.click(within(screen.getByRole("table")).getByRole("button", { name: "Edit status for WI-000002" }));
   expect(within(within(screen.getByRole("table")).getByRole("combobox", { name: "Edit status for WI-000002" })).getAllByRole("option").map((option) => option.value)).toEqual(["review"]);
+});
+
+test("admin Table submits Review through the existing status update when a reviewer is assigned", async () => {
+  const reviewItem = { ...items[0], reviewer: 7, reviewer_detail: { display_name: "Amy" } };
+  workApi.listWorkItems.mockResolvedValue({ data: [reviewItem] });
+  workApi.updateItem.mockResolvedValue({ data: { ...reviewItem, status: "review", permissions: { manage: true, statuses: ["review"] } } });
+  setup();
+  await screen.findByRole("link", { name: "Zebra" });
+  fireEvent.click(within(screen.getByRole("table")).getByRole("button", { name: "Edit status for WI-000002" }));
+  const status = within(screen.getByRole("table")).getByRole("combobox", { name: "Edit status for WI-000002" });
+  expect(within(status).getByRole("option", { name: "Review" })).toBeEnabled();
+  expect(within(status).queryByRole("option", { name: "Done" })).not.toBeInTheDocument();
+  fireEvent.change(status, { target: { value: "review" } });
+  await waitFor(() => expect(workApi.updateItem).toHaveBeenCalledWith(2, { status: "review" }));
+  await waitFor(() => expect(within(screen.getByRole("table")).getByRole("button", { name: "Edit status for WI-000002" })).toHaveTextContent("Review"));
+});
+
+test("admin Table shows why Review is unavailable without a reviewer", async () => {
+  workApi.listWorkItems.mockResolvedValue({ data: [{ ...items[0], permissions: { manage: true, statuses: ["new", "in_progress", "done"] } }] });
+  setup();
+  await screen.findByRole("link", { name: "Zebra" });
+  fireEvent.click(within(screen.getByRole("table")).getByRole("button", { name: "Edit status for WI-000002" }));
+  const status = within(screen.getByRole("table")).getByRole("combobox", { name: "Edit status for WI-000002" });
+  expect(within(status).getByRole("option", { name: "Review" })).toBeDisabled();
+  expect(within(screen.getByRole("table")).getByText("Assign an active reviewer to submit for review.")).toBeInTheDocument();
+  expect(workApi.updateItem).not.toHaveBeenCalled();
+});
+
+test("admin Table shows the backend reviewer error if assignment changes before saving", async () => {
+  workApi.updateItem.mockRejectedValue({ response: { data: { reviewer: ["Assign an active reviewer before submitting for review."] } } });
+  setup();
+  await screen.findByRole("link", { name: "Zebra" });
+  fireEvent.click(within(screen.getByRole("table")).getByRole("button", { name: "Edit status for WI-000002" }));
+  fireEvent.change(within(screen.getByRole("table")).getByRole("combobox", { name: "Edit status for WI-000002" }), { target: { value: "review" } });
+  await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Assign an active reviewer before submitting for review."));
+  expect(within(screen.getByRole("table")).getByRole("button", { name: "Edit status for WI-000002" })).toHaveTextContent("New");
 });
 
 test("a failed inline save restores the displayed value", async () => {

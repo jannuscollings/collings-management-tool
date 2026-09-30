@@ -198,7 +198,7 @@ export default function WorkspacePage() {
       setWorkItems((current) => currentQuery.current !== queryAtStart ? current : current.map((candidate) => (
         candidate.id === item.id ? { ...candidate, status: previousStatus } : candidate
       )));
-      toast.error(error.response?.data?.status?.[0] || error.response?.data?.detail || `Couldn't move ${item.reference}`);
+      toast.error(error.response?.data?.reviewer?.[0] || error.response?.data?.status?.[0] || error.response?.data?.detail || `Couldn't move ${item.reference}`);
     } finally {
       pendingMoves.current.delete(item.id);
       setMoveRevision((value) => value + 1);
@@ -229,7 +229,7 @@ export default function WorkspacePage() {
       });
     } catch (error) {
       const details = error.response?.data;
-      toast.error(details?.[field]?.[0] || details?.detail || `Couldn't update ${field.replace('_', ' ')} for ${item.reference}`);
+      toast.error(details?.[field]?.[0] || details?.reviewer?.[0] || details?.detail || `Couldn't update ${field.replace('_', ' ')} for ${item.reference}`);
     } finally {
       pendingMoves.current.delete(item.id);
       setSavingCell(null);
