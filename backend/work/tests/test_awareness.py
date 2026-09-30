@@ -124,6 +124,20 @@ class AwarenessTests(TestCase):
         self.assertEqual(self.client.post(url+'review/', {'decision':'request_changes','note':'Fix copy'}).status_code, 200)
         self.assertTrue(Notification.objects.filter(event='changes_requested', recipient=self.admin).exists())
 
+    def test_home_shows_requested_changes_only_to_owner_until_resubmission(self):
+        url = f'/api/work-items/{self.item.pk}/'
+        self.client.force_authenticate(self.owner)
+        self.client.patch(url, {'status': 'review'})
+        self.client.force_authenticate(self.reviewer)
+        self.client.post(url + 'review/', {'decision': 'request_changes', 'note': 'Fix copy'})
+        self.assertEqual(self.client.get('/api/home/').data['changes_requested']['count'], 0)
+        self.client.force_authenticate(self.owner)
+        home = self.client.get('/api/home/').data
+        self.assertEqual(home['changes_requested']['count'], 1)
+        self.assertEqual(home['changes_requested']['items'][0]['id'], self.item.pk)
+        self.client.patch(url, {'status': 'review'})
+        self.assertEqual(self.client.get('/api/home/').data['changes_requested']['count'], 0)
+
     def test_admin_assigns_and_mentions_standard_user_visible_in_my_work_and_notifications(self):
         User = get_user_model()
         demo = User.objects.create_user(email='demo@collings.com.au', is_staff=True)

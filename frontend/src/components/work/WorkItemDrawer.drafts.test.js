@@ -283,6 +283,50 @@ test("Staff keeps discussion access without Admin and reviewer controls", async 
   expect(screen.getByRole("textbox", { name: /^Post update/ })).toBeInTheDocument();
 });
 
+test("owner sees requested feedback and resubmits through the existing status update on mobile", async () => {
+  mockUser = { id: 1, is_staff: false };
+  const feedback = { note: "Fix the headline", requested_by: "reviewer@example.com" };
+  const inProgress = { ...item, status: "in_progress", reviewer: 2,
+    outstanding_review_feedback: feedback,
+    permissions: { edit: true, manage: false, review: false, statuses: ["new", "in_progress", "review"] } };
+  setup({ detail: inProgress });
+  workApi.getItem.mockResolvedValue({ data: {
+    ...inProgress, status: "review", outstanding_review_feedback: null,
+    permissions: { ...inProgress.permissions, statuses: ["review"] },
+  } });
+  workApi.updateItem.mockResolvedValue({ data: {} });
+  expect(await screen.findByText("Fix the headline")).toHaveClass("whitespace-pre-wrap", "break-words");
+  expect(screen.getByText("Requested by reviewer@example.com")).toBeInTheDocument();
+  const submit = screen.getByRole("button", { name: "Resubmit for review" });
+  expect(submit).toHaveClass("min-h-11");
+  fireEvent.click(submit);
+  await waitFor(() => expect(workApi.updateItem).toHaveBeenCalledWith("1", { status: "review" }));
+  await waitFor(() => expect(screen.queryByText("Fix the headline")).not.toBeInTheDocument());
+});
+
+test("owner gets submit guidance without a reviewer", async () => {
+  mockUser = { id: 1, is_staff: false };
+  const inProgress = { ...item, status: "in_progress", reviewer: null, reviewer_detail: null,
+    permissions: { edit: true, manage: false, review: false, statuses: ["new", "in_progress"] } };
+  setup({ detail: inProgress });
+  await screen.findByText("Saved brief");
+  expect(screen.getByText("Ask an administrator to assign an active reviewer before submitting for review.")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Submit for review" })).not.toBeInTheDocument();
+});
+
+test("submit for review waits for an unsaved work item draft", async () => {
+  mockUser = { id: 1, is_staff: false };
+  setup({ detail: { ...item, status: "in_progress", reviewer: 2,
+    permissions: { edit: true, manage: false, review: false, statuses: ["new", "in_progress", "review"] } } });
+  const submit = await screen.findByRole("button", { name: "Submit for review" });
+  expect(submit).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  expect(submit).toBeDisabled();
+  fireEvent.change(screen.getByRole("textbox", { name: "Brief" }), { target: { value: "Unsaved brief" } });
+  expect(screen.getByText("Save or discard your drafts before submitting.")).toBeInTheDocument();
+  expect(workApi.updateItem).not.toHaveBeenCalled();
+});
+
 test("selected files support attachment-only posting, removal, failed retry and independent drafts", async () => {
   setup({ guarded: true });
   await screen.findByText("Saved brief");

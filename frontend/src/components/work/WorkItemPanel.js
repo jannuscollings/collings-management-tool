@@ -103,12 +103,15 @@ export default function WorkItemPanel({ itemId, expectedWorkspace, drawer, onCha
   const [linkLabel, setLinkLabel] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
   const [note, setNote] = useState('');
+  const [draftDirty, setDraftDirty] = useState(false);
   const [retry, setRetry] = useState(0);
   const dirtySources = useRef(new Set());
   const markDirty = useCallback((source, value) => {
     if (value) dirtySources.current.add(source);
     else dirtySources.current.delete(source);
-    onDirty?.(dirtySources.current.size > 0);
+    const dirty = dirtySources.current.size > 0;
+    setDraftDirty(dirty);
+    onDirty?.(dirty);
   }, [onDirty]);
   const hasDirty = useCallback((source) => dirtySources.current.has(source), []);
   const setCoreDirty = useCallback((value) => markDirty('core', value), [markDirty]);
@@ -167,6 +170,21 @@ export default function WorkItemPanel({ itemId, expectedWorkspace, drawer, onCha
       <div className="mt-4 flex flex-wrap gap-2"><Badge variant={statusVariants[item.status]}>{statusLabel(item.status)}</Badge><Badge variant={item.priority === 'high' ? 'warning' : 'neutral'} className="capitalize">{item.priority} priority</Badge>{busy && <span role="status" className="text-xs text-brand-strong">Saving…</span>}</div>
     </header>
     {error && <Panel role="alert" className="border-critical/30 p-4 text-sm text-critical">{error}</Panel>}
+    {item.outstanding_review_feedback && <Panel className="border-warning/40 p-4 shell:p-5">
+      <h2 className="text-sm font-extrabold text-ink">Changes requested</h2>
+      <p className="mt-1 text-xs text-muted">Requested by {item.outstanding_review_feedback.requested_by}</p>
+      <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-copy">{item.outstanding_review_feedback.note}</p>
+    </Panel>}
+    {item.owner === user?.id && ['new', 'in_progress'].includes(item.status) && <Panel className="p-4 shell:p-5">
+      <h2 className="text-sm font-extrabold text-ink">Ready for review?</h2>
+      {permissions.statuses.includes('review') ? <>
+        <p className="mt-1 text-xs text-muted">Send this work to {item.reviewer_detail?.display_name} for a decision.</p>
+        <Button className="mt-3 min-h-11 shell:min-h-[38px]" disabled={busy || draftDirty || editing} onClick={() => run(() => workApi.updateItem(itemId, { status: 'review' }))}>
+          {item.outstanding_review_feedback ? 'Resubmit for review' : 'Submit for review'}
+        </Button>
+        {(draftDirty || editing) && <p className="mt-2 text-xs text-muted">Save or discard your drafts before submitting.</p>}
+      </> : <p className="mt-1 text-xs text-muted">{permissions.manage ? 'Assign an active reviewer before submitting for review.' : 'Ask an administrator to assign an active reviewer before submitting for review.'}</p>}
+    </Panel>}
     {item.status === 'review' && <Panel className="border-review/25 p-4 shell:p-5"><h2 className="text-sm font-extrabold text-ink">Awaiting review</h2><p className="mt-1 break-words text-xs text-muted">{item.reviewer_detail?.display_name} is assigned to review this work.</p>{permissions.review && <div className="mt-4 space-y-3"><Field label="Review note" hint="Required when requesting changes."><Textarea value={note} maxLength={10000} onChange={(event) => setNote(event.target.value)} rows={2} /></Field><div className="flex flex-wrap gap-2"><Button className="min-h-11 shell:min-h-[38px]" disabled={busy} onClick={async () => { if (await run(() => workApi.review(itemId, { decision: 'approve', note }))) setNote(''); }}><Check className="h-4 w-4" /> Approve</Button><Button className="min-h-11 shell:min-h-[38px]" variant="secondary" disabled={busy || !note.trim()} onClick={async () => { if (await run(() => workApi.review(itemId, { decision: 'request_changes', note }))) setNote(''); }}>Request changes</Button></div></div>}</Panel>}
     <nav aria-label="Work item sections" className="flex gap-1 overflow-x-auto whitespace-nowrap border-b border-line pb-2 shell:overflow-visible">
       {[['overview', 'Overview'], ['updates', `Updates (${comments.length})`], ['activity', 'Activity']].map(([value, label]) => <Button key={value} variant={tab === value ? 'secondary' : 'ghost'} aria-pressed={tab === value} onClick={() => setTab(value)} className="min-h-11 shrink-0 shell:min-h-[38px]">{label}</Button>)}

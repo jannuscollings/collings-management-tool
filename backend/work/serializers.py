@@ -7,6 +7,7 @@ from django.utils.text import slugify
 
 from .models import WorkGroup, WorkItem, Workspace, SubWork, WorkComment, WorkCommentAttachment, WorkActivity, WorkLink
 from .access import is_admin, visible_items, can_edit, allowed_statuses
+from .review import with_latest_review_event
 
 User = get_user_model()
 
@@ -24,6 +25,16 @@ class WorkUserSerializer(serializers.ModelSerializer):
 
 class WorkItemSerializer(serializers.ModelSerializer):
     permissions = serializers.SerializerMethodField()
+    outstanding_review_feedback = serializers.SerializerMethodField()
+
+    def get_outstanding_review_feedback(self, item):
+        if item.status != 'in_progress':
+            return None
+        if not hasattr(item, 'latest_review_event'):
+            item = with_latest_review_event(WorkItem.objects.filter(pk=item.pk)).get()
+        if item.latest_review_event != 'changes_requested':
+            return None
+        return {'note': item.latest_review_note, 'requested_by': item.latest_review_actor_email}
 
     def get_permissions(self, item):
         user = self.context["request"].user
@@ -48,6 +59,7 @@ class WorkItemSerializer(serializers.ModelSerializer):
             "workspace_slug",
             "workspace_name",
             "permissions",
+            "outstanding_review_feedback",
             "title",
             "brief",
             "status",
@@ -68,6 +80,7 @@ class WorkItemSerializer(serializers.ModelSerializer):
             "workspace_slug",
             "workspace_name",
             "permissions",
+            "outstanding_review_feedback",
             "owner_detail",
             "reviewer_detail",
             "created_by_detail",
@@ -122,9 +135,9 @@ class WorkspaceSerializer(serializers.ModelSerializer):
         fields = ("id", "name", "slug", "display_order", "archived", "groups")
 
     def get_groups(self, workspace):
-        items = visible_items(WorkItem.objects.select_related(
+        items = visible_items(with_latest_review_event(WorkItem.objects.select_related(
             "group__workspace", "owner", "reviewer", "created_by"
-        ), self.context["request"].user)
+        )), self.context["request"].user)
         groups = workspace.groups.filter(archived=False).prefetch_related(
             Prefetch("work_items", queryset=items, to_attr="visible_work_items")
         )

@@ -39,7 +39,7 @@ function Relevance({ item, userId }) {
   const isReviewer = item.reviewer === userId;
   return <div className="flex flex-wrap gap-1.5">
     {isOwner && <Badge variant="info">Owner</Badge>}
-    {isReviewer && <Badge variant="review">Reviewer</Badge>}
+    {isReviewer && <Badge variant="review">{item.status === "review" ? "Waiting for my review" : "Reviewer"}</Badge>}
     {!isOwner && !isReviewer && <Badge variant="neutral">Sub-work</Badge>}
   </div>;
 }

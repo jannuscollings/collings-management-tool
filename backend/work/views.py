@@ -14,6 +14,7 @@ from .access import is_admin, visible_items, can_edit
 from .services import record_activity, record_changes
 from .notifications import notify, assignment_notifications, comment_notifications
 from .due import local_today, due_queryset
+from .review import with_latest_review_event
 from .models import SubWork, WorkComment, WorkCommentAttachment
 from .serializers import SubWorkSerializer, WorkCommentSerializer, WorkActivitySerializer, WorkLinkSerializer
 from rest_framework import mixins, viewsets
@@ -197,13 +198,13 @@ class WorkItemViewSet(
     viewsets.GenericViewSet,
 ):
     serializer_class = WorkItemSerializer
-    queryset = WorkItem.objects.select_related(
+    queryset = with_latest_review_event(WorkItem.objects.select_related(
         "group",
         "group__workspace",
         "owner",
         "reviewer",
         "created_by",
-    )
+    ))
 
     def get_queryset(self):
         queryset = visible_items(super().get_queryset(), self.request.user)

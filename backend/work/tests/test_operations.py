@@ -76,6 +76,28 @@ class OperationsTests(TestCase):
         self.reviewer.save()
         self.assertEqual(self.as_user(self.owner).patch(self.url, {'status': 'review'}).status_code, 400)
 
+    def test_outstanding_feedback_lifecycle_and_permissions(self):
+        self.as_user(self.owner)
+        self.assertEqual(self.client.patch(self.url, {'status': 'in_progress'}).status_code, 200)
+        self.assertEqual(self.client.patch(self.url, {'status': 'review'}).status_code, 200)
+        self.assertEqual(self.client.post(self.url + 'review/', {'decision': 'request_changes', 'note': 'Fix copy'}).status_code, 403)
+        self.as_user(self.reviewer)
+        self.assertEqual(self.client.patch(self.url, {'status': 'in_progress'}).status_code, 403)
+        changed = self.client.post(self.url + 'review/', {'decision': 'request_changes', 'note': 'Fix copy'})
+        self.assertEqual(changed.status_code, 200)
+        self.assertEqual(changed.data['outstanding_review_feedback'], {
+            'note': 'Fix copy', 'requested_by': self.reviewer.email})
+        self.as_user(self.owner)
+        self.assertEqual(self.client.get(self.url).data['outstanding_review_feedback']['note'], 'Fix copy')
+        resubmitted = self.client.patch(self.url, {'status': 'review'})
+        self.assertEqual(resubmitted.status_code, 200)
+        self.assertIsNone(resubmitted.data['outstanding_review_feedback'])
+        self.assertIsNone(self.client.get(self.url).data['outstanding_review_feedback'])
+        self.as_user(self.reviewer)
+        approved = self.client.post(self.url + 'review/', {'decision': 'approve'})
+        self.assertEqual(approved.data['status'], 'done')
+        self.assertIsNone(approved.data['outstanding_review_feedback'])
+
     def test_status_and_activity_roll_back_together(self):
         with patch('work.views.record_changes', side_effect=RuntimeError('audit failure')):
             with self.assertRaises(RuntimeError):

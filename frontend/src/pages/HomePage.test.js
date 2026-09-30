@@ -39,3 +39,14 @@ test("Home links each distinct attention group to its complete My Work filter", 
   expect(screen.getByRole("link", { name: /View all due today in My Work/ })).toHaveAttribute("href", "/my-work?due=today");
   expect(screen.getByRole("link", { name: /View all due soon in My Work/ })).toHaveAttribute("href", "/my-work?due=soon");
 });
+
+test("Home gives owners a direct requested-changes attention cue on mobile", async () => {
+  awarenessApi.home.mockResolvedValue({ data: {
+    today: "2026-09-29",
+    changes_requested: { count: 1, items: [{ id: 3, reference: "WI-000003", title: "Revise copy",
+      group__workspace__name: "Creative & Design", priority: "medium", due_date: null, status: "in_progress" }] },
+  } });
+  render(<MemoryRouter><HomePage /></MemoryRouter>);
+  expect(await screen.findByText("Changes requested from me")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /Revise copy/ })).toHaveAttribute("href", "/item");
+});

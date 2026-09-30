@@ -20,6 +20,7 @@ test("My Work labels sub-work-only items without implying ownership or review", 
     { ...base, id: 1, reference: "WI-000001", title: "Assigned sub-work", owner: 8, reviewer: null },
     { ...base, id: 2, reference: "WI-000002", title: "Owned work", owner: 7, reviewer: null },
     { ...base, id: 3, reference: "WI-000003", title: "Review work", owner: 8, reviewer: 7 },
+    { ...base, id: 4, reference: "WI-000004", title: "Waiting work", owner: 8, reviewer: 7, status: "review" },
   ] });
   render(<MemoryRouter><MyWorkPage /></MemoryRouter>);
 
@@ -29,12 +30,14 @@ test("My Work labels sub-work-only items without implying ownership or review", 
   expect(within(subWorkRow).queryByText("Reviewer")).not.toBeInTheDocument();
   expect(within(screen.getByRole("row", { name: /Owned work/ })).getByText("Owner")).toBeInTheDocument();
   expect(within(screen.getByRole("row", { name: /Review work/ })).getByText("Reviewer")).toBeInTheDocument();
+  expect(within(screen.getByRole("row", { name: /Waiting work/ })).getByText("Waiting for my review")).toBeInTheDocument();
   expect(workApi.listWorkItems).toHaveBeenCalledWith({ relevance: "mine" });
   const mobile = screen.getByLabelText("My Work mobile items");
   expect(within(mobile).getByText("Assigned sub-work")).toBeInTheDocument();
   expect(within(mobile).getByText("Sub-work")).toBeInTheDocument();
   expect(within(mobile).getByText("Owner")).toBeInTheDocument();
   expect(within(mobile).getByText("Reviewer")).toBeInTheDocument();
+  expect(within(mobile).getByText("Waiting for my review")).toBeInTheDocument();
   expect(screen.getByRole("table").parentElement).toHaveClass("hidden", "shell:block");
   expect(mobile).toHaveClass("shell:hidden");
   expect(mobile.closest("[class*='pb-16']")).toHaveClass("pb-16");

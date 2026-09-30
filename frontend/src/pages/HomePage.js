@@ -12,6 +12,7 @@ import DueDate from "../components/work/DueDate";
 const sections = [
   ['overdue', 'Overdue', 'danger', 'overdue'], ['due_today', 'Due today', 'warning', 'today'],
   ['due_soon', 'Due soon · next 3 days', 'warning', 'soon'], ['review', 'Awaiting my review', 'review'],
+  ['changes_requested', 'Changes requested from me', 'warning'],
   ['my_open', 'My open work', 'neutral'],
   ['recent', 'Recently updated · last 7 days', 'neutral'], ['triage', 'New requests requiring triage', 'brand'],
 ];
