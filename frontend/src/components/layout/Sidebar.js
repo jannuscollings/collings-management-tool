@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { Archive, Briefcase, Inbox, Layers3, Settings2, Ticket } from "lucide-react";
+import { Archive, Briefcase, Inbox, Layers3, Settings2, Ticket, UsersRound } from "lucide-react";
 
 import { cn } from "../../lib/cn";
 import { useSelector } from "react-redux";
@@ -73,6 +73,9 @@ export default function Sidebar() {
         </div>
         {user?.is_staff && <NavLink to="/archive" className={navItemClass}>
           <Archive className="h-4 w-4" aria-hidden="true" />Archive
+        </NavLink>}
+        {user?.is_staff && <NavLink to="/people" className={navItemClass}>
+          <UsersRound className="h-4 w-4" aria-hidden="true" />People
         </NavLink>}
         <div className="mb-3">
           <p className="px-2.5 pb-1.5 pt-2 text-[9px] font-extrabold uppercase tracking-[0.14em] text-muted">Demo</p>

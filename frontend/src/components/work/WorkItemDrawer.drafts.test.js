@@ -49,7 +49,7 @@ jest.mock("./NotificationsPanel", () => () => null);
 const item = {
   id: 1, reference: "WI-000001", title: "Campaign", brief: "Saved brief", group: 1,
   group_name: "Production", workspace_slug: "creative-design", workspace_name: "Creative & Design",
-  status: "review", priority: "medium", owner: 1, reviewer: 1, due_date: null,
+  status: "review", priority: "medium", owner: 1, reviewer: 1, start_date: null, due_date: null,
   reviewer_detail: { display_name: "Reviewer" }, owner_detail: { display_name: "Owner" },
   permissions: { edit: true, manage: true, review: true, statuses: ["review"] },
 };
@@ -130,6 +130,21 @@ test("core edits survive tab switches and reverting to saved values clears the c
   fireEvent.click(screen.getByRole("button", { name: "Close work item" }));
   expect(window.confirm).toHaveBeenCalledTimes(1);
   expect(screen.getByTestId("location")).not.toHaveTextContent("item=1");
+});
+
+test("start date edits enter the close guard and are included in the editor payload", async () => {
+  workApi.updateItem.mockResolvedValue({ data: {} });
+  setup({ detail: { ...item, due_date: "2026-10-10" } });
+  await screen.findByText("Saved brief");
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  const start = screen.getByLabelText("Start date");
+  fireEvent.change(start, { target: { value: "2026-10-01" } });
+  fireEvent.click(screen.getByRole("button", { name: "Close work item" }));
+  expect(window.confirm).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+  await waitFor(() => expect(workApi.updateItem).toHaveBeenCalledWith("1", expect.objectContaining({
+    start_date: "2026-10-01", due_date: "2026-10-10",
+  })));
 });
 
 test("post and review drafts stay independent for X, overlay and Escape", async () => {

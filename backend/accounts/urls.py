@@ -1,4 +1,5 @@
 from django.urls import path
+from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
@@ -7,6 +8,9 @@ from rest_framework_simplejwt.views import (
 
 from . import views
 
+router = DefaultRouter()
+router.register("people", views.PeopleViewSet, basename="people")
+
 urlpatterns = [
     path("csrf/", views.csrf, name="csrf"),
     path("register/", views.RegisterView.as_view(), name="register"),
@@ -14,4 +18,5 @@ urlpatterns = [
     path("refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("verify/", TokenVerifyView.as_view(), name="token_verify"),
     path("me/", views.MeView.as_view(), name="me"),
+    *router.urls,
 ]

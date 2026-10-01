@@ -77,6 +77,7 @@ class WorkItem(models.Model):
         null=True,
         blank=True,
     )
+    start_date = models.DateField(null=True, blank=True)
     due_date = models.DateField(null=True, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

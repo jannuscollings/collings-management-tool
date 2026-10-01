@@ -25,6 +25,7 @@ const activityLabels = {
   created: "Created this work item", status_changed: "Changed status", review_submitted: "Submitted for review",
   approved: "Approved the work", changes_requested: "Requested changes", owner_id_changed: "Changed owner",
   reviewer_id_changed: "Changed reviewer", priority_changed: "Changed priority", due_date_changed: "Changed due date",
+  start_date_added: "Start date added", start_date_changed: "Start date changed", start_date_cleared: "Start date cleared",
   title_changed: "Updated title", brief_changed: "Updated brief", group_id_changed: "Moved group",
   sub_work_created: "Created sub-work", sub_work_updated: "Updated sub-work", sub_work_completed: "Completed sub-work",
   sub_work_reopened: "Reopened sub-work", comment_added: "Added an update", link_added: "Added a link", link_removed: "Removed a link",
@@ -38,9 +39,9 @@ function Section({ title, description, children, action }) {
   return <Panel className="min-w-0 p-4 shell:p-5"><div className="mb-4 flex flex-wrap items-start justify-between gap-3 shell:flex-nowrap"><div className="min-w-0"><h2 className="break-words text-sm font-extrabold text-ink">{title}</h2>{description && <p className="mt-1 break-words text-xs text-muted">{description}</p>}</div>{action}</div>{children}</Panel>;
 }
 function CoreEditor({ item, groups, users, busy, onSave, onCancel, onDirty }) {
-  const [form, setForm] = useState({ title: item.title, brief: item.brief, group: item.group, status: item.status, priority: item.priority, owner: item.owner || '', reviewer: item.reviewer || '', due_date: item.due_date || '' });
+  const [form, setForm] = useState({ title: item.title, brief: item.brief, group: item.group, status: item.status, priority: item.priority, owner: item.owner || '', reviewer: item.reviewer || '', start_date: item.start_date || '', due_date: item.due_date || '' });
   useEffect(() => {
-    const saved = { title: item.title, brief: item.brief, group: item.group, status: item.status, priority: item.priority, owner: item.owner || '', reviewer: item.reviewer || '', due_date: item.due_date || '' };
+    const saved = { title: item.title, brief: item.brief, group: item.group, status: item.status, priority: item.priority, owner: item.owner || '', reviewer: item.reviewer || '', start_date: item.start_date || '', due_date: item.due_date || '' };
     onDirty?.(Object.keys(saved).some((key) => String(form[key]) !== String(saved[key])));
     return () => onDirty?.(false);
   }, [form, item, onDirty]);
@@ -48,7 +49,7 @@ function CoreEditor({ item, groups, users, busy, onSave, onCancel, onDirty }) {
   const submit = (event) => {
     event.preventDefault();
     let payload = { title: form.title.trim(), brief: form.brief, status: form.status };
-    if (item.permissions.manage) payload = { ...payload, group: Number(form.group), priority: form.priority, owner: form.owner ? Number(form.owner) : null, reviewer: form.reviewer ? Number(form.reviewer) : null, due_date: form.due_date || null };
+    if (item.permissions.manage) payload = { ...payload, group: Number(form.group), priority: form.priority, owner: form.owner ? Number(form.owner) : null, reviewer: form.reviewer ? Number(form.reviewer) : null, start_date: form.start_date || null, due_date: form.due_date || null };
     onSave(payload);
   };
   return <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
@@ -58,8 +59,9 @@ function CoreEditor({ item, groups, users, busy, onSave, onCancel, onDirty }) {
     {item.permissions.manage && <>
       <Field label="Group"><Select value={form.group} onChange={change('group')}>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</Select></Field>
       <Field label="Priority"><Select value={form.priority} onChange={change('priority')}>{WORK_PRIORITY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select></Field>
+      <Field label="Start date"><Input type="date" value={form.start_date} onChange={change('start_date')} /></Field>
       <Field label="Due date"><Input type="date" value={form.due_date} onChange={change('due_date')} /></Field>
-      {['owner', 'reviewer'].map((key) => <Field key={key} label={key}><Select value={form[key]} onChange={change(key)}><option value="">Unassigned</option>{users.map((person) => <option key={person.id} value={person.id}>{person.display_name}</option>)}</Select></Field>)}
+      {['owner', 'reviewer'].map((key) => <Field key={key} label={key}><Select value={form[key]} onChange={change(key)}><option value="">Unassigned</option>{item[key] && !users.some((person) => person.id === item[key]) && <option value={item[key]}>{item[`${key}_detail`]?.display_name || "Former team member"} (inactive)</option>}{users.map((person) => <option key={person.id} value={person.id}>{person.display_name}</option>)}</Select></Field>)}
     </>}
     <div className="flex flex-wrap justify-end gap-2 sm:col-span-2"><Button variant="secondary" disabled={busy} onClick={onCancel} className="min-h-11 shell:min-h-[38px]">Cancel</Button><Button type="submit" disabled={busy} className="min-h-11 shell:min-h-[38px]">{busy ? 'Saving…' : 'Save changes'}</Button></div>
   </form>;
@@ -75,7 +77,7 @@ function SubWorkRow({ sub, users, manage, userId, busy, onSave, onDraftDirty }) 
   return <li className="border-t border-line py-3 first:border-0">
     {editing ? <form className="grid gap-2 sm:grid-cols-[1fr_150px_auto]" onSubmit={async (event) => { event.preventDefault(); if (await onSave({ title, assignee: assignee ? Number(assignee) : null })) setEditing(false); }}>
       <Input aria-label="Sub-work title" required maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} />
-      <Select aria-label="Sub-work assignee" value={assignee} onChange={(event) => setAssignee(event.target.value)}><option value="">Unassigned</option>{users.map((person) => <option key={person.id} value={person.id}>{person.display_name}</option>)}</Select>
+      <Select aria-label="Sub-work assignee" value={assignee} onChange={(event) => setAssignee(event.target.value)}><option value="">Unassigned</option>{sub.assignee && !users.some((person) => person.id === sub.assignee) && <option value={sub.assignee}>{sub.assignee_detail?.display_name || "Former team member"} (inactive)</option>}{users.map((person) => <option key={person.id} value={person.id}>{person.display_name}</option>)}</Select>
       <div className="flex gap-1"><Button type="submit" disabled={busy} className="min-h-11 shell:min-h-[38px]">Save</Button><Button variant="ghost" onClick={() => setEditing(false)} aria-label="Cancel editing" className="min-h-11 shell:min-h-[38px]"><X className="h-4 w-4" /></Button></div>
     </form> : <div className="flex items-center gap-3">
       <label className="grid min-h-11 min-w-11 shrink-0 place-items-center shell:min-h-0 shell:min-w-0"><input type="checkbox" checked={sub.completed} disabled={busy || (!manage && sub.assignee !== userId)} onChange={(event) => onSave({ completed: event.target.checked })} aria-label={`${sub.completed ? 'Reopen' : 'Complete'} ${sub.title}`} className="h-4 w-4 accent-primary" /></label>
@@ -209,7 +211,7 @@ export default function WorkItemPanel({ itemId, expectedWorkspace, drawer, onCha
       <Section title="Delivery details" action={permissions.edit && !editing && <Button variant="ghost" disabled={busy} onClick={() => setEditing(true)} className="min-h-11 shell:min-h-[38px]"><Pencil className="h-3.5 w-3.5" /> Edit</Button>}>
         {editing ? <CoreEditor item={item} groups={groups} users={users} busy={busy} onDirty={setCoreDirty} onCancel={() => setEditing(false)} onSave={async (payload) => { if (await run(() => workApi.updateItem(itemId, payload))) setEditing(false); }} /> : <>
           <p className="whitespace-pre-wrap break-words text-[13px] leading-6 text-copy">{item.brief || 'No brief added yet.'}</p>
-          <dl className="mt-5 grid gap-4 border-t border-line pt-4 sm:grid-cols-3"><div><dt className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted">Owner</dt><dd className="text-xs text-copy"><Identity person={item.owner_detail} /></dd></div><div><dt className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted">Reviewer</dt><dd className="text-xs text-copy"><Identity person={item.reviewer_detail} /></dd></div><div><dt className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted">Due date</dt><dd className="pt-1 text-xs font-semibold text-copy"><DueDate item={item} empty="Not set" /></dd></div></dl>
+          <dl className="mt-5 grid gap-4 border-t border-line pt-4 sm:grid-cols-4"><div><dt className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted">Owner</dt><dd className="text-xs text-copy"><Identity person={item.owner_detail} /></dd></div><div><dt className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted">Reviewer</dt><dd className="text-xs text-copy"><Identity person={item.reviewer_detail} /></dd></div><div><dt className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted">Start date</dt><dd className="pt-1 text-xs font-semibold text-copy">{item.start_date || 'Not set'}</dd></div><div><dt className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted">Due date</dt><dd className="pt-1 text-xs font-semibold text-copy"><DueDate item={item} empty="Not set" /></dd></div></dl>
         </>}
       </Section>
       <Section title="Sub-work" description={`${subs.filter((sub) => sub.completed).length} of ${subs.length} complete`}>
@@ -223,7 +225,7 @@ export default function WorkItemPanel({ itemId, expectedWorkspace, drawer, onCha
     </div>
     <div hidden={tab !== 'updates'}><WorkDiscussion itemId={itemId} comments={comments} users={users} busy={busy} run={run} onDraftDirty={markDirty} hasDirty={hasDirty} /></div>
     {tab === 'activity' && <Section title="Activity" description="Recorded changes and review decisions.">
-      {activity.length ? <ol className="space-y-5 border-l border-line pl-5">{activity.map((entry) => <li key={entry.id} className="relative break-words"><span className="absolute -left-[25px] top-1 h-2 w-2 rounded-full bg-brand" /><p className="text-xs font-bold text-copy">{activityLabels[entry.event] || entry.event}</p><p className="mt-1 text-[11px] text-muted">{entry.actor_detail.display_name} · {stamp(entry.created_at)}</p>{entry.details.note && <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-copy">{entry.details.note}</p>}{(entry.details.title || entry.details.label || entry.details.request) && <p className="mt-1 text-xs text-copy">{entry.details.title || entry.details.label || entry.details.request}</p>}{'after' in entry.details && !['brief_changed', 'title_changed'].includes(entry.event) && <p className="mt-1 text-xs text-copy">{entry.details.before || 'Unassigned'} → {entry.details.after || 'Unassigned'}</p>}</li>)}</ol> : <p className="text-xs text-muted">No recorded activity yet. Earlier work is preserved; history starts with this update.</p>}
+      {activity.length ? <ol className="space-y-5 border-l border-line pl-5">{activity.map((entry) => <li key={entry.id} className="relative break-words"><span className="absolute -left-[25px] top-1 h-2 w-2 rounded-full bg-brand" /><p className="text-xs font-bold text-copy">{activityLabels[entry.event] || entry.event}</p><p className="mt-1 text-[11px] text-muted">{entry.actor_detail.display_name} · {stamp(entry.created_at)}</p>{entry.details.note && <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-copy">{entry.details.note}</p>}{(entry.details.title || entry.details.label || entry.details.request) && <p className="mt-1 text-xs text-copy">{entry.details.title || entry.details.label || entry.details.request}</p>}{'after' in entry.details && !['brief_changed', 'title_changed'].includes(entry.event) && <p className="mt-1 text-xs text-copy">{entry.details.before || (entry.event.startsWith('start_date_') ? 'Not set' : 'Unassigned')} → {entry.details.after || (entry.event.startsWith('start_date_') ? 'Not set' : 'Unassigned')}</p>}</li>)}</ol> : <p className="text-xs text-muted">No recorded activity yet. Earlier work is preserved; history starts with this update.</p>}
     </Section>}
   </div>;
 }

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import { Link, useLocation } from "react-router-dom";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Archive, Bell, Briefcase, Home, Layers3, MoreHorizontal, Settings2, Ticket, X } from "lucide-react";
+import { Archive, Bell, Briefcase, Home, Layers3, MoreHorizontal, Settings2, Ticket, UsersRound, X } from "lucide-react";
 
 import AccountMenu from "./AccountMenu";
 import { DrawerLink, useWorkItemContext } from "../work/WorkItemDrawer";
@@ -17,7 +17,7 @@ export default function MobileNavigation() {
   const [moreOpen, setMoreOpen] = useState(false);
   const query = new URLSearchParams(location.search);
   const notificationsActive = query.get("drawer") === "notifications";
-  const moreActive = moreOpen || (!notificationsActive && (location.pathname.startsWith("/workspaces/") || location.pathname === "/archive"));
+  const moreActive = moreOpen || (!notificationsActive && (location.pathname.startsWith("/workspaces/") || location.pathname === "/archive" || location.pathname === "/people"));
   const drawerContainer = moreOpen ? document.getElementById("cmt-drawer-content") : null;
 
   useEffect(() => { setMoreOpen(false); }, [location.key]);
@@ -60,6 +60,9 @@ export default function MobileNavigation() {
             </DrawerLink>}
             {user?.is_staff && <Link to="/archive" className={moreLinkClass}>
               <Archive className="h-4 w-4 shrink-0" aria-hidden="true" />Archive
+            </Link>}
+            {user?.is_staff && <Link to="/people" className={moreLinkClass}>
+              <UsersRound className="h-4 w-4 shrink-0" aria-hidden="true" />People
             </Link>}
           </div>
           <div className="border-t border-line py-3">

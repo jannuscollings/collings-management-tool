@@ -3,11 +3,12 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { DrawerLink, WorkItemLink, useWorkItemContext } from "../components/work/WorkItemDrawer";
 import toast from "react-hot-toast";
-import { LayoutGrid, List, Plus, Search, SlidersHorizontal, X } from "lucide-react";
+import { CalendarDays, LayoutGrid, List, Plus, Search, SlidersHorizontal, X } from "lucide-react";
 
 import { WORK_PRIORITY_OPTIONS, WORK_STATUS_OPTIONS, workApi } from "../api/work";
 import PageContainer from "../components/layout/PageContainer";
 import WorkspaceKanban from "../components/work/WorkspaceKanban";
+import WorkspaceTimeline from "../components/work/WorkspaceTimeline";
 import WorkspaceTableCell from "../components/work/WorkspaceTableCell";
 import { sortWorkItems, TABLE_COLUMNS } from "./workspaceTable";
 import Badge from "../components/ui/Badge";
@@ -39,7 +40,7 @@ export default function WorkspacePage() {
   const fetchSequence = useRef(0);
   const [moveRevision, setMoveRevision] = useState(0);
 
-  const viewMode = searchParams.get("view") === "kanban" ? "kanban" : "table";
+  const viewMode = ["kanban", "timeline"].includes(searchParams.get("view")) ? searchParams.get("view") : "table";
   const querySearch = searchParams.get("q") || "";
   const boardFocus = searchParams.get("board");
   const statusFilter = searchParams.get("status") || "";
@@ -168,7 +169,7 @@ export default function WorkspacePage() {
 
   const changeView = (nextView) => {
     const next = new URLSearchParams(searchParams);
-    if (nextView === "kanban") next.set("view", "kanban");
+    if (nextView !== "table") next.set("view", nextView);
     else next.delete("view");
     setSearchParams(next);
   };
@@ -268,6 +269,16 @@ export default function WorkspacePage() {
               >
                 <LayoutGrid className="h-3.5 w-3.5" /> Kanban
               </button>
+              <button
+                type="button"
+                aria-pressed={viewMode === "timeline"}
+                onClick={() => changeView("timeline")}
+                className={`inline-flex min-h-[32px] items-center gap-1.5 rounded-ds-xs px-3 text-[11.5px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand/20 ${
+                  viewMode === "timeline" ? "bg-brand-soft text-brand-strong" : "text-muted hover:bg-canvas hover:text-copy"
+                }`}
+              >
+                <CalendarDays className="h-3.5 w-3.5" /> Timeline
+              </button>
             </div>
             {isAdmin && <Button asChild>
               <DrawerLink drawer="new-work-item" drawerParams={{ drawerWorkspace: workspaceSlug }}>
@@ -323,7 +334,7 @@ export default function WorkspacePage() {
         {itemsLoading && <p className="mt-2 text-[10.5px] text-muted">Updating work items…</p>}
       </Panel>
 
-      <div className={`${viewMode === "kanban" ? "hidden" : ""} space-y-5 transition-opacity ${itemsLoading ? "opacity-70" : "opacity-100"}`}>
+      {viewMode === "table" && <div className={`space-y-5 transition-opacity ${itemsLoading ? "opacity-70" : "opacity-100"}`}>
         {tableGroups.map((group) => (
           <section key={group.id} id={`board-${group.id}`} tabIndex={-1} className="scroll-mt-20 focus:outline-none">
             <Panel className="overflow-hidden">
@@ -390,7 +401,7 @@ export default function WorkspacePage() {
             </Panel>
           </section>
         ))}
-      </div>
+      </div>}
       {viewMode === "kanban" && (
         <WorkspaceKanban
           hasActiveFilters={hasActiveFilters}
@@ -401,6 +412,7 @@ export default function WorkspacePage() {
           workspaceSlug={workspaceSlug}
         />
       )}
+      {viewMode === "timeline" && <WorkspaceTimeline groups={filteredGroups} hasActiveFilters={hasActiveFilters} loading={itemsLoading} />}
     </PageContainer>
   );
 }

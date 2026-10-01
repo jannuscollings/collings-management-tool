@@ -10,7 +10,10 @@ def record_changes(item, actor, before):
     for field, old in before.items():
         new = getattr(item, field)
         if new != old:
-            event = 'review_submitted' if field == 'status' and new == 'review' else f'{field}_changed'
+            if field == 'start_date':
+                event = 'start_date_added' if old is None else 'start_date_cleared' if new is None else 'start_date_changed'
+            else:
+                event = 'review_submitted' if field == 'status' and new == 'review' else f'{field}_changed'
             def label(value):
                 if value is None:
                     return None

@@ -118,6 +118,6 @@ class WorkRequestTriageSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         for field_name in ("owner", "reviewer"):
             user = attrs.get(field_name)
-            if user is not None and not user.is_active:
+            if user is not None and not user.is_active and (not self.instance or getattr(self.instance, f"{field_name}_id") != user.pk):
                 raise serializers.ValidationError({field_name: "Select an active user."})
         return attrs

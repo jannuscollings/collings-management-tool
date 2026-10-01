@@ -11,6 +11,7 @@ import RequestDetailPage from "./pages/RequestDetailPage";
 import MyWorkPage from "./pages/MyWorkPage";
 import HomePage from "./pages/HomePage";
 import ArchivePage from "./pages/ArchivePage";
+import PeoplePage from "./pages/PeoplePage";
 import AppShell from "./components/layout/AppShell";
 import NavigationGuard from "./components/navigation/NavigationGuard";
 
@@ -36,6 +37,7 @@ const router = createBrowserRouter(createRoutesFromElements(
           <Route path="/home" element={<HomePage />} />
           <Route path="/my-work" element={<MyWorkPage />} />
           <Route path="/archive" element={<ArchivePage />} />
+          <Route path="/people" element={<PeoplePage />} />
           <Route path="/requests" element={<RequestsPage />} />
           <Route path="/requests/new" element={<NewRequestPage />} />
           <Route path="/requests/:requestId" element={<RequestDetailPage />} />

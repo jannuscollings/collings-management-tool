@@ -12,6 +12,7 @@ const blankForm = {
   priority: "medium",
   owner: "",
   reviewer: "",
+  start_date: "",
   due_date: "",
 };
 
@@ -60,13 +61,15 @@ export default function NewWorkItemForm({ workspaceSlug, onCreated, onDirty, onB
         title: form.title.trim(),
         owner: form.owner ? Number(form.owner) : null,
         reviewer: form.reviewer ? Number(form.reviewer) : null,
+        start_date: form.start_date || null,
         due_date: form.due_date || null,
       });
       toast.success(`${data.reference} created`);
       onDirty(false);
       onCreated(data);
     } catch (error) {
-      toast.error(error.response?.data?.title?.[0] || error.response?.data?.detail || "Couldn't create the work item");
+      const errors = error.response?.data;
+      toast.error(errors?.start_date?.[0] || errors?.due_date?.[0] || errors?.title?.[0] || errors?.detail || "Couldn't create the work item");
     } finally {
       setSaving(false);
     }
@@ -106,10 +109,13 @@ export default function NewWorkItemForm({ workspaceSlug, onCreated, onDirty, onB
           {users.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}
         </Select>
       </Field>
+      <Field label="Start date">
+        <Input type="date" value={form.start_date} onChange={update("start_date")} />
+      </Field>
       <Field label="Due date">
         <Input type="date" value={form.due_date} onChange={update("due_date")} />
       </Field>
-      <div className="flex items-end sm:justify-end">
+      <div className="flex items-end sm:col-span-2 sm:justify-end">
         <Button type="submit" disabled={saving} className="w-full sm:w-auto">
           {saving ? "Creating…" : "Create work item"}
         </Button>

@@ -185,6 +185,24 @@ test("Workspace Table and Kanban share mobile bottom clearance without changing 
   expect(workspacePage).toHaveClass("pb-16", "shell:pb-[34px]");
 });
 
+test("Timeline uses the existing filtered items, Board grouping, drawer links, and URL view", async () => {
+  workApi.listWorkItems.mockResolvedValue({ data: [
+    { ...items[0], start_date: "2026-10-01", due_date: "2026-10-03" },
+    { ...items[1], start_date: null, due_date: null },
+  ] });
+  setup("/workspaces/creative-design/?view=timeline&status=new");
+  const timeline = await screen.findByLabelText("Workspace Timeline");
+  expect(screen.getByRole("button", { name: "Timeline" })).toHaveAttribute("aria-pressed", "true");
+  expect(within(timeline).getByRole("region", { name: "Property launch Timeline" })).toBeInTheDocument();
+  expect(within(timeline).getByText("Unscheduled")).toBeInTheDocument();
+  expect(within(timeline).getByRole("link", { name: /WI-000001 · Alpha/ })).toHaveAttribute("href", "/workspaces/creative-design/?item=1");
+  fireEvent.click(screen.getByRole("button", { name: "Kanban" }));
+  expect(screen.getByText("Kanban view")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Timeline" }));
+  expect(screen.getByLabelText("Workspace Timeline")).toBeInTheDocument();
+  expect(workApi.listWorkItems).toHaveBeenCalledWith({ workspace: "creative-design", status: "new" });
+});
+
 test("mobile Staff items show details without edit controls", async () => {
   mockUser = { is_staff: false };
   setup();

@@ -312,6 +312,8 @@ class WorkItemViewSet(
             raise PermissionDenied("Only administrators can create work items.")
         item = serializer.save(created_by=self.request.user)
         record_activity(item, self.request.user, "created")
+        if item.start_date:
+            record_activity(item, self.request.user, "start_date_added", before=None, after=str(item.start_date))
         assignment_notifications(item, self.request.user)
 
     @transaction.atomic
@@ -320,7 +322,7 @@ class WorkItemViewSet(
         serializer = self.get_serializer(item, data=request.data, partial=kwargs.get("partial", False))
         serializer.is_valid(raise_exception=True)
         before = {field: getattr(item, field) for field in
-                  ("title", "brief", "group_id", "status", "priority", "owner_id", "reviewer_id", "due_date")}
+                  ("title", "brief", "group_id", "status", "priority", "owner_id", "reviewer_id", "start_date", "due_date")}
         serializer.save()
         record_changes(item, request.user, before)
         return Response(serializer.data)

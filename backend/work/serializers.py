@@ -69,6 +69,7 @@ class WorkItemSerializer(serializers.ModelSerializer):
             "owner_detail",
             "reviewer",
             "reviewer_detail",
+            "start_date",
             "due_date",
             "created_by_detail",
             "created_at",
@@ -100,6 +101,12 @@ class WorkItemSerializer(serializers.ModelSerializer):
             if forbidden:
                 raise PermissionDenied("Only administrators can change assignments and delivery properties.")
         group = attrs.get("group")
+        start_date = attrs.get("start_date", item.start_date if item else None)
+        due_date = attrs.get("due_date", item.due_date if item else None)
+        if start_date and not due_date:
+            raise serializers.ValidationError({"due_date": "Set a due date when a start date is set."})
+        if start_date and due_date and start_date > due_date:
+            raise serializers.ValidationError({"start_date": "Start date must be on or before due date."})
         if group and (group.archived or group.workspace.archived):
             raise serializers.ValidationError({"group": "Select an active group."})
         next_status = attrs.get("status", item.status if item else "new")
@@ -108,11 +115,13 @@ class WorkItemSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"status": "Use Approve or Request changes to leave Review."})
         if (not item or next_status != item.status) and next_status == "done" and reviewer:
             raise serializers.ValidationError({"status": "Assigned review must be approved by the reviewer."})
-        if next_status == "review" and (not reviewer or not reviewer.is_active):
+        if next_status == "review" and (not reviewer or (
+            not reviewer.is_active and (not item or item.status != "review" or item.reviewer_id != reviewer.pk)
+        )):
             raise serializers.ValidationError({"reviewer": "Assign an active reviewer before submitting for review."})
         for field_name in ("owner", "reviewer"):
             user = attrs.get(field_name)
-            if user is not None and not user.is_active:
+            if user is not None and not user.is_active and (not item or getattr(item, f"{field_name}_id") != user.pk):
                 raise serializers.ValidationError({field_name: "Select an active user."})
         return attrs
 
@@ -214,7 +223,7 @@ class SubWorkSerializer(serializers.ModelSerializer):
         read_only_fields = ("id", "created_at", "updated_at")
 
     def validate_assignee(self, user):
-        if user and not user.is_active:
+        if user and not user.is_active and (not self.instance or self.instance.assignee_id != user.pk):
             raise serializers.ValidationError("Select an active user.")
         return user
 
