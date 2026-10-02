@@ -92,7 +92,7 @@ function Composer({ users, initial, busy, label, onSave, onCancel, source, onDra
     if (entry.url) { URL.revokeObjectURL(entry.url); previewUrls.current.delete(entry.url); }
     setFiles((current) => current.filter((_, index) => index !== position));
   };
-  const suggestions = query ? users.filter((user) => `${user.display_name} ${user.email}`.toLowerCase().includes(query.text.toLowerCase())).slice(0, 6) : [];
+  const suggestions = query ? users.filter((user) => `${user.display_name} ${user.email}`.toLowerCase().includes(query.text.toLowerCase())) : [];
   const detect = (element) => {
     const end = element.selectionStart;
     const match = element.value.slice(0, end).match(/(?:^|\s)@([^\s@]*)$/);
