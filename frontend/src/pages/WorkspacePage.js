@@ -24,6 +24,76 @@ const STATUS_LABELS = {
   done: "Done",
 };
 
+function GroupHeading({ group, canRename, onRename }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(group.name);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const inputRef = useRef(null);
+  const savingRef = useRef(false);
+  const cancelRef = useRef(false);
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
+
+  const cancel = () => {
+    cancelRef.current = true;
+    setName(group.name);
+    setError("");
+    setEditing(false);
+  };
+
+  const save = async () => {
+    if (cancelRef.current || savingRef.current) return;
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === group.name) {
+      cancel();
+      return;
+    }
+    savingRef.current = true;
+    setSaving(true);
+    setError("");
+    try {
+      await onRename(group, trimmed);
+      setEditing(false);
+    } catch (renameError) {
+      setError(renameError.response?.data?.name?.[0] || renameError.response?.data?.detail || "Couldn't rename the group. Try again.");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
+
+  return <div className="min-w-0">
+    <h2 className="text-[13px] font-extrabold tracking-[0.02em] text-ink">
+      {editing ? <input
+        ref={inputRef}
+        aria-label={`Rename ${group.name}`}
+        value={name}
+        maxLength={120}
+        disabled={saving}
+        onChange={(event) => setName(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") { event.preventDefault(); save(); }
+          if (event.key === "Escape") { event.preventDefault(); cancel(); }
+        }}
+        onBlur={save}
+        className="min-w-0 max-w-full rounded-ds-xs border border-brand bg-surface px-2 py-1 text-inherit outline-none focus:ring-2 focus:ring-brand/20"
+      /> : <span
+        onDoubleClick={canRename ? () => { cancelRef.current = false; setName(group.name); setEditing(true); } : undefined}
+        title={canRename ? "Double-click to rename" : undefined}
+        className={canRename ? "cursor-text rounded-ds-xs hover:text-brand-strong" : undefined}
+      >{group.name}</span>}
+    </h2>
+    {saving && <span role="status" className="text-[10.5px] text-muted">Saving…</span>}
+    {error && <span role="alert" className="text-[10.5px] text-danger">{error}</span>}
+  </div>;
+}
+
 export default function WorkspacePage() {
   const { revision } = useWorkItemContext();
   const isAdmin = useSelector((state) => state.auth.user?.is_staff);
@@ -237,6 +307,15 @@ export default function WorkspacePage() {
     }
   };
 
+  const renameGroup = async (group, name) => {
+    if (!isAdmin) return;
+    const { data } = await workApi.renameBoard(workspaceSlug, group.id, name);
+    setWorkspace((current) => ({ ...current, groups: current.groups.map((candidate) => ({
+      ...candidate,
+      name: data.find((board) => board.id === candidate.id)?.name ?? candidate.name,
+    })) }));
+  };
+
   if (loading) return <PageContainer className="text-sm text-muted">Loading workspace…</PageContainer>;
   if (!workspace) return <PageContainer className="text-sm text-copy">Workspace unavailable.</PageContainer>;
 
@@ -339,7 +418,7 @@ export default function WorkspacePage() {
           <section key={group.id} id={`board-${group.id}`} tabIndex={-1} className="scroll-mt-20 focus:outline-none">
             <Panel className="overflow-hidden">
               <div className="flex items-center justify-between gap-3 border-b border-line bg-canvas/55 px-4 py-3">
-                <h2 className="text-[13px] font-extrabold tracking-[0.02em] text-ink">{group.name}</h2>
+                <GroupHeading group={group} canRename={isAdmin} onRename={renameGroup} />
                 <Badge variant="neutral">{group.work_items.length} {group.work_items.length === 1 ? "item" : "items"}</Badge>
               </div>
               <div className="hidden overflow-x-auto shell:block">
@@ -348,7 +427,7 @@ export default function WorkspacePage() {
                     <tr className="border-b border-line">
                       {TABLE_COLUMNS.map(([column, heading]) => (
                         <th key={column} scope="col" aria-sort={sortColumn === column && sortDirection ? (sortDirection === "asc" ? "ascending" : "descending") : "none"} className="px-[13px] py-2.5 text-[9.5px] font-extrabold uppercase tracking-[0.08em] text-muted">
-                          <button type="button" onClick={() => changeSort(column)} className="inline-flex items-center gap-1 rounded-ds-xs text-left hover:text-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30">{heading}{sortColumn === column && sortDirection && <span aria-hidden="true">{sortDirection === "asc" ? "↑" : "↓"}</span>}</button>
+                          <button type="button" onClick={() => changeSort(column)} className="inline-flex items-center gap-1 rounded-ds-xs text-left uppercase hover:text-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30">{heading}{sortColumn === column && sortDirection && <span aria-hidden="true">{sortDirection === "asc" ? "↑" : "↓"}</span>}</button>
                         </th>
                       ))}
                     </tr>

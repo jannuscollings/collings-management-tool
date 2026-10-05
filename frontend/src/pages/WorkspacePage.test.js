@@ -11,7 +11,7 @@ jest.mock("react-hot-toast", () => ({ __esModule: true, default: { error: jest.f
 jest.mock("../api/work", () => ({
   WORK_STATUS_OPTIONS: [["new", "New"], ["in_progress", "In progress"], ["review", "Review"], ["done", "Done"]],
   WORK_PRIORITY_OPTIONS: [["low", "Low"], ["medium", "Medium"], ["high", "High"]],
-  workApi: { getWorkspace: jest.fn(), listUsers: jest.fn(), listWorkItems: jest.fn(), updateItem: jest.fn() },
+  workApi: { getWorkspace: jest.fn(), listUsers: jest.fn(), listWorkItems: jest.fn(), updateItem: jest.fn(), renameBoard: jest.fn() },
 }));
 jest.mock("../components/work/WorkItemDrawer", () => ({
   useWorkItemContext: () => ({ revision: 0 }),
@@ -56,6 +56,57 @@ test("headers cycle through URL-backed sorting and Back restores the previous or
   expect(screen.getByTestId("location").textContent).toBe("");
   fireEvent.click(screen.getByRole("button", { name: "Back" }));
   await waitFor(() => expect(header).toHaveAttribute("aria-sort", "descending"));
+});
+
+test("Workspace sort labels render uppercase without changing their accessible names", async () => {
+  setup();
+  await screen.findByRole("link", { name: "Zebra" });
+  expect(screen.getByRole("button", { name: "Work item" })).toHaveClass("uppercase");
+});
+
+test("Admin can rename a group with Enter and cancel a later edit with Escape", async () => {
+  workApi.renameBoard.mockResolvedValue({ data: [{ id: 1, name: "Campaign delivery" }] });
+  setup();
+  const heading = await screen.findByRole("heading", { name: "Property launch" });
+  fireEvent.doubleClick(within(heading).getByText("Property launch"));
+  const input = screen.getByRole("textbox", { name: "Rename Property launch" });
+  expect(input).toHaveFocus();
+  fireEvent.change(input, { target: { value: "Campaign delivery" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  await waitFor(() => expect(workApi.renameBoard).toHaveBeenCalledWith("creative-design", 1, "Campaign delivery"));
+  await waitFor(() => expect(screen.queryByRole("textbox", { name: "Rename Property launch" })).not.toBeInTheDocument());
+  const renamed = screen.getByRole("heading", { name: "Campaign delivery" });
+  fireEvent.doubleClick(within(renamed).getByText("Campaign delivery"));
+  const secondInput = screen.getByRole("textbox", { name: "Rename Campaign delivery" });
+  fireEvent.change(secondInput, { target: { value: "Canceled name" } });
+  fireEvent.keyDown(secondInput, { key: "Escape" });
+  expect(screen.getByRole("heading", { name: "Campaign delivery" })).toBeInTheDocument();
+  expect(workApi.renameBoard).toHaveBeenCalledTimes(1);
+});
+
+test("Admin blur saves valid group names and leaves empty names unchanged", async () => {
+  workApi.renameBoard.mockResolvedValue({ data: [{ id: 1, name: "Renamed board" }] });
+  setup();
+  const heading = await screen.findByRole("heading", { name: "Property launch" });
+  fireEvent.doubleClick(within(heading).getByText("Property launch"));
+  const input = screen.getByRole("textbox", { name: "Rename Property launch" });
+  fireEvent.change(input, { target: { value: "   " } });
+  fireEvent.blur(input);
+  expect(workApi.renameBoard).not.toHaveBeenCalled();
+  fireEvent.doubleClick(within(screen.getByRole("heading", { name: "Property launch" })).getByText("Property launch"));
+  const validInput = screen.getByRole("textbox", { name: "Rename Property launch" });
+  fireEvent.change(validInput, { target: { value: " Renamed board " } });
+  fireEvent.blur(validInput);
+  await waitFor(() => expect(workApi.renameBoard).toHaveBeenCalledWith("creative-design", 1, "Renamed board"));
+});
+
+test("Staff cannot enter inline group rename", async () => {
+  mockUser = { is_staff: false };
+  setup();
+  const heading = await screen.findByRole("heading", { name: "Property launch" });
+  fireEvent.doubleClick(within(heading).getByText("Property launch"));
+  expect(screen.queryByRole("textbox", { name: /Rename Property launch/ })).not.toBeInTheDocument();
+  expect(workApi.renameBoard).not.toHaveBeenCalled();
 });
 
 test("a URL sort survives refresh state and clearing filters", async () => {
