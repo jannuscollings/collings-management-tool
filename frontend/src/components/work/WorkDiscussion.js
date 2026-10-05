@@ -67,8 +67,9 @@ function Composer({ users, initial, busy, label, onSave, onCancel, source, onDra
   const mounted = useRef(true);
   const previewUrls = useRef(new Set());
   useEffect(() => {
+    const urls = previewUrls.current;
     mounted.current = true;
-    return () => { mounted.current = false; previewUrls.current.forEach((url) => URL.revokeObjectURL(url)); };
+    return () => { mounted.current = false; urls.forEach((url) => URL.revokeObjectURL(url)); };
   }, []);
   useEffect(() => {
     onDraftDirty(source, initial ? body.trim() !== initial.body.trim() : Boolean(body.trim()) || files.length > 0);
