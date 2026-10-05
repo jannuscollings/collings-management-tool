@@ -11,7 +11,7 @@ import Badge from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Field, Input, Select } from "../components/ui/Field";
 
-const blank = { first_name: "", last_name: "", email: "", role: "staff", password: "" };
+const blank = { first_name: "", last_name: "", email: "", job_title: "", role: "staff", password: "" };
 
 export default function PeoplePage() {
   const user = useSelector((state) => state.auth.user);
@@ -36,13 +36,13 @@ export default function PeoplePage() {
 
   const edit = (person) => {
     setEditingId(person.id);
-    setForm({ first_name: person.first_name, last_name: person.last_name, email: person.email, role: person.is_staff ? "admin" : "staff", password: "" });
+    setForm({ first_name: person.first_name, last_name: person.last_name, email: person.email, job_title: person.job_title || "", role: person.is_staff ? "admin" : "staff", password: "" });
   };
   const save = async (event) => {
     event.preventDefault();
     setBusy(true);
     try {
-      const payload = { first_name: form.first_name.trim(), last_name: form.last_name.trim(), email: form.email.trim(), is_staff: form.role === "admin" };
+      const payload = { first_name: form.first_name.trim(), last_name: form.last_name.trim(), email: form.email.trim(), job_title: form.job_title.trim(), is_staff: form.role === "admin" };
       if (!editingId) payload.password = form.password;
       if (editingId) await peopleApi.update(editingId, payload);
       else await peopleApi.create(payload);
@@ -78,7 +78,8 @@ export default function PeoplePage() {
         <Field label="First name"><Input required maxLength={150} value={form.first_name} onChange={(event) => setForm({ ...form, first_name: event.target.value })} /></Field>
         <Field label="Last name"><Input required maxLength={150} value={form.last_name} onChange={(event) => setForm({ ...form, last_name: event.target.value })} /></Field>
         <Field label="Email"><Input required type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></Field>
-        <Field label="Role"><Select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })} disabled={Boolean(editingId === user.id || people.find((person) => person.id === editingId)?.is_superuser)}><option value="staff">Staff</option><option value="admin">Admin</option></Select></Field>
+        <Field label="Job title"><Input maxLength={150} value={form.job_title} onChange={(event) => setForm({ ...form, job_title: event.target.value })} /></Field>
+        <Field label="Access"><Select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })} disabled={Boolean(editingId === user.id || people.find((person) => person.id === editingId)?.is_superuser)}><option value="staff">Staff</option><option value="admin">Admin</option></Select></Field>
         {!editingId && <Field label="Initial password" hint="At least 8 characters. Share it with the person separately."><Input required type="password" minLength={8} autoComplete="new-password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /></Field>}
         <div className="flex flex-wrap items-end justify-end gap-2 sm:col-span-2">
           <Button variant="secondary" disabled={busy} onClick={() => { setForm(null); setEditingId(null); }}>Cancel</Button>
@@ -90,6 +91,7 @@ export default function PeoplePage() {
       <div className="space-y-3">{people.map((person) => <Panel key={person.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
         <div className="min-w-0">
           <p className="break-words text-sm font-bold text-ink">{person.display_name}</p>
+          {person.job_title && <p className="break-words text-xs font-semibold text-copy">{person.job_title}</p>}
           <p className="break-all text-xs text-muted">{person.email}</p>
           <div className="mt-2 flex flex-wrap gap-2"><Badge variant={person.is_staff ? "brand" : "neutral"}>{person.is_staff ? "Admin" : "Staff"}</Badge><Badge variant={person.is_active ? "success" : "neutral"}>{person.is_active ? "Active" : "Inactive"}</Badge></div>
         </div>

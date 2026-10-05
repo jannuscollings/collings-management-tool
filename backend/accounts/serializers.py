@@ -29,7 +29,7 @@ class PeopleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ("id", "first_name", "last_name", "display_name", "email", "is_staff", "is_active", "is_superuser", "password")
+        fields = ("id", "first_name", "last_name", "display_name", "email", "job_title", "is_staff", "is_active", "is_superuser", "password")
         read_only_fields = ("id", "is_superuser", "display_name")
 
     def get_display_name(self, user):

@@ -36,6 +36,7 @@ class User(AbstractUser):
     # Drop the username field; email is the login handle.
     username = None
     email = models.EmailField("email address", unique=True)
+    job_title = models.CharField(max_length=150, blank=True, default="")
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []

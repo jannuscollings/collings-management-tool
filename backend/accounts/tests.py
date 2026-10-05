@@ -46,13 +46,45 @@ class PeopleApiTests(TestCase):
         self.assertEqual(self.client.patch(f"/api/auth/people/{person.pk}/", {"is_active": True}).status_code, 200)
         self.assertEqual(self.client.delete(f"/api/auth/people/{person.pk}/").status_code, 405)
 
+    def test_job_title_is_optional_editable_and_does_not_grant_admin_access(self):
+        self.as_user(self.admin)
+        response = self.client.post("/api/auth/people/", {
+            "first_name": "Jane", "last_name": "Designer", "email": "jane@example.com",
+            "job_title": "UI/UX Designer", "is_staff": False, "password": "password123",
+        })
+        self.assertEqual(response.status_code, 201, response.data)
+        person = User.objects.get(email="jane@example.com")
+        self.assertEqual(response.data["job_title"], "UI/UX Designer")
+        self.assertFalse(person.is_staff)
+        self.as_user(person)
+        self.assertEqual(self.client.get("/api/auth/people/").status_code, 403)
+
+        self.as_user(self.admin)
+        url = f"/api/auth/people/{person.pk}/"
+        self.assertEqual(self.client.patch(url, {"job_title": "Graphic Designer"}).status_code, 200)
+        person.refresh_from_db()
+        self.assertEqual(person.job_title, "Graphic Designer")
+        self.assertFalse(person.is_staff)
+        self.assertEqual(self.client.patch(url, {"job_title": ""}).status_code, 200)
+        person.refresh_from_db()
+        self.assertEqual(person.job_title, "")
+        self.assertFalse(person.is_staff)
+
     def test_self_and_last_admin_lockout(self):
         self.as_user(self.admin)
         url = f"/api/auth/people/{self.admin.pk}/"
         self.assertEqual(self.client.patch(url, {"is_staff": False}).status_code, 400)
         self.assertEqual(self.client.patch(url, {"is_active": False}).status_code, 400)
         self.assertEqual(self.client.patch(f"/api/auth/people/{self.staff.pk}/", {"is_staff": True}).status_code, 200)
+        self.staff.refresh_from_db()
+        self.as_user(self.staff)
+        self.assertEqual(self.client.get("/api/auth/people/").status_code, 200)
+        self.as_user(self.admin)
         self.assertEqual(self.client.patch(f"/api/auth/people/{self.staff.pk}/", {"is_staff": False}).status_code, 200)
+        self.staff.refresh_from_db()
+        self.as_user(self.staff)
+        self.assertEqual(self.client.get("/api/auth/people/").status_code, 403)
+        self.as_user(self.admin)
         self.assertEqual(self.client.patch(f"/api/auth/people/{self.staff.pk}/", {"is_staff": True}).status_code, 200)
         self.assertEqual(self.client.patch(f"/api/auth/people/{self.staff.pk}/", {"is_active": False}).status_code, 200)
         self.admin.refresh_from_db()
@@ -95,3 +127,9 @@ class PeopleApiTests(TestCase):
         self.assertTrue(retained_sub.is_valid(), retained_sub.errors)
         new_sub = SubWorkSerializer(data={"title": "New", "assignee": self.staff.pk})
         self.assertFalse(new_sub.is_valid())
+        self.assertEqual(self.client.patch(f"/api/auth/people/{self.staff.pk}/", {"is_active": True}).status_code, 200)
+        self.assertIn(self.staff.pk, [person["id"] for person in self.client.get("/api/work-users/").data])
+        available_item = WorkItemSerializer(data={"group": group.pk, "title": "New", "owner": self.staff.pk}, context=context)
+        self.assertTrue(available_item.is_valid(), available_item.errors)
+        available_sub = SubWorkSerializer(data={"title": "New", "assignee": self.staff.pk})
+        self.assertTrue(available_sub.is_valid(), available_sub.errors)
