@@ -136,7 +136,7 @@ export default function WorkItemDrawer({ children }) {
   };
   const titles = {
     "new-work-item": ["New work item", "Create delivery work without leaving the workspace"],
-    "new-request": ["Request internal work", "Submit a Creative & Design request for triage"],
+    "new-request": ["Create Request", "Submit a Creative & Design request for triage"],
     notifications: ["Notifications", "Updates that need your attention"],
     workspaces: ["Manage workspaces", "Create, rename, order and archive workspaces"],
   };

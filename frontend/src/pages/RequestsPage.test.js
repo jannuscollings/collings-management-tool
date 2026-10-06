@@ -9,7 +9,7 @@ jest.mock("react-redux", () => ({ useSelector: (selector) => selector({ auth: { 
 jest.mock("../api/workRequests", () => ({ workRequestsApi: { list: jest.fn() } }));
 jest.mock("../components/work/WorkItemDrawer", () => ({
   useWorkItemContext: () => ({ requestRevision: 0 }),
-  DrawerLink: ({ children }) => <a href="/requests/new">{children}</a>,
+  DrawerLink: ({ children, ...props }) => <a href="/requests/new" {...props}>{children}</a>,
   RequestLink: ({ children }) => <a href="/request">{children}</a>,
 }));
 
@@ -41,5 +41,8 @@ test("Requests keeps the desktop table and shows linked compact mobile records",
   expect(within(mobile).getByText("Requester", { exact: false })).toBeInTheDocument();
   expect(screen.getByRole("table").parentElement).toHaveClass("hidden", "shell:block");
   expect(mobile.closest("[class*='pb-16']")).toHaveClass("pb-16");
-  expect(screen.getByRole("link", { name: /Request internal/ })).toBeInTheDocument();
+  const create = screen.getByRole("link", { name: "New Request" });
+  expect(create).toHaveAttribute("href", "/requests/new");
+  expect(create).toHaveClass("min-h-11", "shell:min-h-[38px]", "w-auto", "px-3.5", "bg-brand");
+  expect(create.querySelector("svg")).toBeInTheDocument();
 });

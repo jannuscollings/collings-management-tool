@@ -47,8 +47,8 @@ export default function RequestsPage() {
         title="Requests"
         description={isAdmin ? "Review incoming work and route it into a workspace." : "Track the requests you've submitted."}
         actions={
-          <Button asChild>
-            <DrawerLink drawer="new-request"><Plus className="h-4 w-4" /> Request internal</DrawerLink>
+          <Button asChild className="min-h-11 w-auto shrink-0 gap-1.5 whitespace-nowrap px-3.5 text-xs shell:min-h-[38px]">
+            <DrawerLink drawer="new-request"><Plus className="h-4 w-4" /> New Request</DrawerLink>
           </Button>
         }
       />
