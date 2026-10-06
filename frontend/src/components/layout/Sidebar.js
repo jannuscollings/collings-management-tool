@@ -1,8 +1,12 @@
-import { NavLink } from "react-router-dom";
-import { Archive, Briefcase, ChevronLeft, ChevronRight, Inbox, Layers3, Settings2, Ticket, UsersRound } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import toast from "react-hot-toast";
+import { Archive, Briefcase, ChevronLeft, ChevronRight, Inbox, Layers3, MoreHorizontal, Settings2, Ticket, UsersRound } from "lucide-react";
 
 import { cn } from "../../lib/cn";
 import { useSelector } from "react-redux";
+import { workApi } from "../../api/work";
 import { DrawerLink, useWorkItemContext } from "../work/WorkItemDrawer";
 
 const groups = [
@@ -23,9 +27,116 @@ const navItemClass = (collapsed) => ({ isActive }) =>
     isActive && "border-brand/25 bg-brand-soft text-brand-strong"
   );
 
+function WorkspaceRow({ workspace, collapsed, isAdmin, refreshWorkspaces }) {
+  const [name, setName] = useState(workspace.name);
+  const [draft, setDraft] = useState(workspace.name);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [archived, setArchived] = useState(false);
+  const inputRef = useRef(null);
+  const savingRef = useRef(false);
+  const cancelRef = useRef(false);
+  const renamingRef = useRef(false);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => { setName(workspace.name); setDraft(workspace.name); }, [workspace.name]);
+  useEffect(() => { if (editing) { inputRef.current?.focus(); inputRef.current?.select(); } }, [editing]);
+
+  const cancel = () => {
+    cancelRef.current = true;
+    setDraft(name);
+    setError("");
+    setEditing(false);
+  };
+  const save = async (fromBlur = false) => {
+    if (cancelRef.current || savingRef.current) return;
+    const trimmed = draft.trim();
+    if (!trimmed) {
+      if (fromBlur) cancel();
+      else setError("Enter a workspace name.");
+      return;
+    }
+    if (trimmed === name) { cancel(); return; }
+    savingRef.current = true;
+    setSaving(true);
+    setError("");
+    try {
+      await workApi.updateWorkspace(workspace.slug, { name: trimmed });
+      setName(trimmed);
+      setDraft(trimmed);
+      setEditing(false);
+      refreshWorkspaces?.();
+      toast.success("Workspace renamed");
+    } catch (requestError) {
+      setError(requestError.response?.data?.name?.[0] || "Couldn't rename the workspace.");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
+  const archive = async () => {
+    if (!window.confirm(`Archive ${name}? Its work remains stored, but the workspace will leave normal navigation.`)) return;
+    setSaving(true);
+    try {
+      await workApi.archiveWorkspace(workspace.slug);
+      setArchived(true);
+      refreshWorkspaces?.();
+      toast.success("Workspace archived");
+      const path = `/workspaces/${workspace.slug}`;
+      if (location.pathname === path || location.pathname.startsWith(`${path}/`)) navigate("/home");
+    } catch (requestError) {
+      setError(requestError.response?.data?.detail || "Couldn't update the workspace.");
+    } finally { setSaving(false); }
+  };
+
+  if (archived) return null;
+  if (collapsed || !isAdmin) return <NavLink to={`/workspaces/${workspace.slug}`} className={navItemClass(collapsed)} aria-label={collapsed ? name : undefined} title={collapsed ? name : undefined}>
+    <Layers3 className="h-4 w-4 shrink-0" aria-hidden="true" />
+    {!collapsed && <span className="truncate">{name}</span>}
+  </NavLink>;
+
+  return <div className="relative min-w-0">
+    <div className="flex min-w-0 items-center gap-1">
+      {editing ? <div className="flex min-h-[42px] min-w-0 flex-1 items-center gap-2 px-3">
+        <Layers3 className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
+        <input ref={inputRef} aria-label={`Rename ${name}`} value={draft} maxLength={120} disabled={saving}
+          onChange={(event) => { setDraft(event.target.value); setError(""); }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") { event.preventDefault(); save(); }
+            if (event.key === "Escape") { event.preventDefault(); cancel(); }
+          }}
+          onBlur={() => save(true)}
+          className="min-w-0 w-full rounded-ds-xs border border-brand bg-surface px-2 py-1 text-[13px] text-ink outline-none focus:ring-2 focus:ring-brand/20" />
+      </div> : <NavLink to={`/workspaces/${workspace.slug}`} className={({ isActive }) => cn(navItemClass(false)({ isActive }), "min-w-0 flex-1")}>
+        <Layers3 className="h-4 w-4 shrink-0" aria-hidden="true" /><span className="truncate">{name}</span>
+      </NavLink>}
+      {!editing && <DropdownMenu.Root>
+        <DropdownMenu.Trigger asChild><button type="button" disabled={saving} aria-label={`Actions for ${name}`} title={`Actions for ${name}`}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-ds-xs text-muted hover:bg-canvas hover:text-copy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+        </button></DropdownMenu.Trigger>
+        <DropdownMenu.Portal><DropdownMenu.Content align="end" sideOffset={4}
+          onCloseAutoFocus={(event) => { if (renamingRef.current) { event.preventDefault(); inputRef.current?.focus(); inputRef.current?.select(); renamingRef.current = false; } }}
+          className="z-[80] min-w-[176px] rounded-ds-sm border border-line bg-surface p-1 font-product text-copy shadow-overlay">
+          <DropdownMenu.Item onSelect={() => { renamingRef.current = true; cancelRef.current = false; setDraft(name); setError(""); setEditing(true); }}
+            className="cursor-pointer rounded-ds-xs px-3 py-2 text-xs font-semibold outline-none focus:bg-brand-soft focus:text-brand-strong">Rename workspace</DropdownMenu.Item>
+          <DropdownMenu.Item asChild className="cursor-pointer rounded-ds-xs px-3 py-2 text-xs font-semibold outline-none focus:bg-brand-soft focus:text-brand-strong">
+            <DrawerLink drawer="workspaces">Manage boards</DrawerLink>
+          </DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={archive} className="cursor-pointer rounded-ds-xs px-3 py-2 text-xs font-semibold text-critical outline-none focus:bg-critical/5">Archive workspace</DropdownMenu.Item>
+        </DropdownMenu.Content></DropdownMenu.Portal>
+      </DropdownMenu.Root>}
+    </div>
+    {saving && <span role="status" className="px-3 text-[10px] text-muted">Saving…</span>}
+    {error && <span role="alert" className="block px-3 text-[10px] text-critical">{error}</span>}
+  </div>;
+}
+
 export default function Sidebar({ collapsed = false, onToggle }) {
   const user = useSelector((state) => state.auth.user);
-  const { workspaces, workspaceLoadError, retryWorkspaces } = useWorkItemContext();
+  const { workspaces, workspaceLoadError, retryWorkspaces, refreshWorkspaces } = useWorkItemContext();
   const itemClass = navItemClass(collapsed);
 
   return (
@@ -67,12 +178,7 @@ export default function Sidebar({ collapsed = false, onToggle }) {
             )}
           </div>
           <div className="space-y-1">
-            {workspaces.map((workspace) => (
-              <NavLink key={workspace.id} to={`/workspaces/${workspace.slug}`} className={itemClass} aria-label={collapsed ? workspace.name : undefined} title={collapsed ? workspace.name : undefined}>
-                <Layers3 className="h-4 w-4 shrink-0" aria-hidden="true" />
-                {!collapsed && <span className="truncate">{workspace.name}</span>}
-              </NavLink>
-            ))}
+            {workspaces.map((workspace) => <WorkspaceRow key={workspace.id} workspace={workspace} collapsed={collapsed} isAdmin={Boolean(user?.is_staff)} refreshWorkspaces={refreshWorkspaces} />)}
             {workspaceLoadError && <button type="button" onClick={retryWorkspaces} aria-label={collapsed ? "Reload workspaces" : undefined} title={collapsed ? "Reload workspaces" : undefined} className={cn("text-left text-xs font-semibold text-brand-strong", collapsed ? "flex min-h-[42px] w-full items-center justify-center" : "px-3 py-2")}>
               {collapsed ? <Layers3 className="h-4 w-4" aria-hidden="true" /> : "Reload workspaces"}
             </button>}

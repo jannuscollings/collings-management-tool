@@ -16,6 +16,11 @@ jest.mock("../work/WorkItemDrawer", () => ({
 }));
 jest.mock("./AppHeader", () => () => <header>Header</header>);
 jest.mock("./MobileNavigation", () => () => <nav aria-label="Mobile primary navigation" className="shell:hidden">Mobile</nav>);
+jest.mock("@radix-ui/react-dropdown-menu", () => ({
+  Root: ({ children }) => <>{children}</>, Trigger: ({ children }) => children,
+  Portal: ({ children }) => <>{children}</>, Content: ({ children }) => <div>{children}</div>,
+  Item: ({ children }) => children,
+}));
 
 function setup(path = "/home") {
   return render(<MemoryRouter initialEntries={[path]}><Routes><Route element={<AppShell />}>
