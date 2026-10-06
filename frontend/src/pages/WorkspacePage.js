@@ -61,7 +61,7 @@ function GroupHeading({ group, canRename, onRename }) {
       await onRename(group, trimmed);
       setEditing(false);
     } catch (renameError) {
-      setError(renameError.response?.data?.name?.[0] || renameError.response?.data?.detail || "Couldn't rename the group. Try again.");
+      setError(renameError.response?.data?.name?.[0] || renameError.response?.data?.detail || "Couldn't rename the board. Try again.");
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -106,9 +106,17 @@ export default function WorkspacePage() {
   const [itemsLoading, setItemsLoading] = useState(true);
   const [savingItemIds, setSavingItemIds] = useState(() => new Set());
   const [savingCell, setSavingCell] = useState(null);
+  const [showNewBoard, setShowNewBoard] = useState(false);
+  const [newBoardName, setNewBoardName] = useState("");
+  const [boardCreating, setBoardCreating] = useState(false);
+  const [boardError, setBoardError] = useState("");
   const pendingMoves = useRef(new Set());
   const fetchSequence = useRef(0);
   const [moveRevision, setMoveRevision] = useState(0);
+  const workspaceSlugRef = useRef(workspaceSlug);
+  workspaceSlugRef.current = workspaceSlug;
+
+  useEffect(() => { setShowNewBoard(false); setNewBoardName(""); setBoardError(""); }, [workspaceSlug]);
 
   const viewMode = ["kanban", "timeline"].includes(searchParams.get("view")) ? searchParams.get("view") : "table";
   const querySearch = searchParams.get("q") || "";
@@ -316,6 +324,28 @@ export default function WorkspacePage() {
     })) }));
   };
 
+  const createBoard = async (event) => {
+    event.preventDefault();
+    if (!isAdmin || boardCreating) return;
+    const name = newBoardName.trim();
+    if (!name) { setBoardError("Enter a board name."); return; }
+    setBoardCreating(true);
+    setBoardError("");
+    try {
+      const { data } = await workApi.addBoard(workspaceSlug, name);
+      if (workspaceSlugRef.current === workspaceSlug) {
+        setWorkspace((current) => ({ ...current, groups: data.map((board) =>
+          current.groups.find((group) => group.id === board.id) || { ...board, work_items: [] }
+        ) }));
+        setNewBoardName("");
+        setShowNewBoard(false);
+      }
+      toast.success("Board added");
+    } catch (error) {
+      setBoardError(error.response?.data?.name?.[0] || error.response?.data?.detail || "Couldn't add the board.");
+    } finally { setBoardCreating(false); }
+  };
+
   if (loading) return <PageContainer className="text-sm text-muted">Loading workspace…</PageContainer>;
   if (!workspace) return <PageContainer className="text-sm text-copy">Workspace unavailable.</PageContainer>;
 
@@ -359,6 +389,10 @@ export default function WorkspacePage() {
                 <CalendarDays className="h-3.5 w-3.5" /> Timeline
               </button>
             </div>
+            {isAdmin && <Button variant="secondary" disabled={boardCreating} aria-expanded={showNewBoard} aria-controls="new-board-form"
+              onClick={() => { setShowNewBoard((open) => !open); setNewBoardName(""); setBoardError(""); }}>
+              <Plus className="h-4 w-4" /> New Board
+            </Button>}
             {isAdmin && <Button asChild>
               <DrawerLink drawer="new-work-item" drawerParams={{ drawerWorkspace: workspaceSlug }}>
                 <Plus className="h-4 w-4" /> New work item
@@ -367,6 +401,18 @@ export default function WorkspacePage() {
           </>
         }
       />
+
+      {isAdmin && showNewBoard && <Panel id="new-board-form" className="mb-5 p-4">
+        <form onSubmit={createBoard} className="flex flex-wrap items-end gap-3">
+          <Field label="Board name" className="min-w-[180px] flex-1">
+            <Input autoFocus required maxLength={120} value={newBoardName}
+              onChange={(event) => { setNewBoardName(event.target.value); setBoardError(""); }} />
+          </Field>
+          <Button type="submit" disabled={boardCreating || !newBoardName.trim()}>{boardCreating ? "Creating…" : "Create Board"}</Button>
+          <Button variant="secondary" disabled={boardCreating} onClick={() => { setShowNewBoard(false); setNewBoardName(""); setBoardError(""); }}>Cancel</Button>
+        </form>
+        {boardError && <p role="alert" className="mt-2 text-xs text-critical">{boardError}</p>}
+      </Panel>}
 
       <Panel className="mb-5 p-3 shell:p-4">
         <div className="grid gap-2 shell:grid-cols-[minmax(230px,2fr)_repeat(3,minmax(140px,1fr))_auto] shell:items-end shell:gap-3">
@@ -436,7 +482,7 @@ export default function WorkspacePage() {
                     {group.work_items.length === 0 ? (
                       <tr>
                         <td colSpan="7" className="px-4 py-6 text-center text-xs text-muted">
-                          {hasActiveFilters ? "No work items match the current filters." : "No work items in this group."}
+                          {hasActiveFilters ? "No work items match the current filters." : "No work items in this board."}
                         </td>
                       </tr>
                     ) : group.work_items.map((item) => (
@@ -455,7 +501,7 @@ export default function WorkspacePage() {
               </div>
               <div role="list" className="divide-y divide-line/70 shell:hidden" aria-label={`${group.name} mobile work items`}>
                 {group.work_items.length === 0 ? <p className="px-4 py-6 text-center text-xs text-muted">
-                  {hasActiveFilters ? "No work items match the current filters." : "No work items in this group."}
+                  {hasActiveFilters ? "No work items match the current filters." : "No work items in this board."}
                 </p> : group.work_items.map((item) => {
                   const canEdit = isAdmin && item.permissions?.manage && !itemsLoading && !pendingMoves.current.has(item.id);
                   const mobileField = (field, label, className = "") => <div key={field} className={`min-w-0 ${className}`}>

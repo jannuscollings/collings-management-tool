@@ -11,7 +11,7 @@ jest.mock("react-hot-toast", () => ({ __esModule: true, default: { error: jest.f
 jest.mock("../api/work", () => ({
   WORK_STATUS_OPTIONS: [["new", "New"], ["in_progress", "In progress"], ["review", "Review"], ["done", "Done"]],
   WORK_PRIORITY_OPTIONS: [["low", "Low"], ["medium", "Medium"], ["high", "High"]],
-  workApi: { getWorkspace: jest.fn(), listUsers: jest.fn(), listWorkItems: jest.fn(), updateItem: jest.fn(), renameBoard: jest.fn() },
+  workApi: { getWorkspace: jest.fn(), listUsers: jest.fn(), listWorkItems: jest.fn(), updateItem: jest.fn(), renameBoard: jest.fn(), addBoard: jest.fn() },
 }));
 jest.mock("../components/work/WorkItemDrawer", () => ({
   useWorkItemContext: () => ({ revision: 0 }),
@@ -31,13 +31,61 @@ function LocationTools() {
   const navigate = useNavigate();
   return <><output data-testid="location">{location.search}</output><button onClick={() => navigate(-1)}>Back</button></>;
 }
-function setup(path = "/workspaces/creative-design/") {
-  workApi.getWorkspace.mockResolvedValue({ data: { name: "Creative & Design", groups: [{ id: 1, name: "Property launch" }] } });
+function setup(path = "/workspaces/creative-design/", workspaceData = { name: "Creative & Design", groups: [{ id: 1, name: "Property launch" }] }) {
+  workApi.getWorkspace.mockResolvedValue({ data: workspaceData });
   workApi.listUsers.mockResolvedValue({ data: [{ id: 7, display_name: "Amy" }] });
   if (!workApi.listWorkItems.getMockImplementation()) workApi.listWorkItems.mockResolvedValue({ data: items });
   return render(<MemoryRouter initialEntries={[path]}><Routes><Route path="/workspaces/:workspaceSlug/" element={<><LocationTools /><WorkspacePage /></>} /></Routes></MemoryRouter>);
 }
 beforeEach(() => { jest.resetAllMocks(); mockUser = { is_staff: true }; });
+
+test("Admin creates a Board in this Workspace and sees it immediately across applicable views", async () => {
+  workApi.addBoard.mockResolvedValue({ data: [
+    { id: 1, name: "Property launch", display_order: 1 },
+    { id: 2, name: "New delivery", display_order: 2 },
+  ] });
+  const view = setup();
+  await screen.findByRole("heading", { name: "Property launch" });
+  fireEvent.click(screen.getByRole("button", { name: "New Board" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Board name" }), { target: { value: "  New delivery  " } });
+  fireEvent.click(screen.getByRole("button", { name: "Create Board" }));
+  await waitFor(() => expect(workApi.addBoard).toHaveBeenCalledWith("creative-design", "New delivery"));
+  await screen.findByRole("heading", { name: "New delivery" });
+  expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["Property launch", "New delivery"]);
+  fireEvent.click(screen.getByRole("button", { name: "Kanban" }));
+  expect(screen.getByText("Kanban view")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Timeline" }));
+  expect(screen.getByRole("region", { name: "New delivery Timeline" })).toBeInTheDocument();
+  view.unmount();
+  setup("/workspaces/creative-design/", { name: "Creative & Design", groups: [
+    { id: 1, name: "Property launch" }, { id: 2, name: "New delivery" },
+  ] });
+  expect(await screen.findByRole("heading", { name: "New delivery" })).toBeInTheDocument();
+});
+
+test("Staff cannot create Boards from the Workspace", async () => {
+  mockUser = { is_staff: false };
+  setup();
+  await screen.findByRole("heading", { name: "Property launch" });
+  expect(screen.queryByRole("button", { name: "New Board" })).not.toBeInTheDocument();
+  expect(workApi.addBoard).not.toHaveBeenCalled();
+});
+
+test("blank Board names are blocked and a rejected name keeps the form open", async () => {
+  workApi.addBoard.mockRejectedValue({ response: { data: { name: ["A board with this name already exists."] } } });
+  setup();
+  await screen.findByRole("heading", { name: "Property launch" });
+  fireEvent.click(screen.getByRole("button", { name: "New Board" }));
+  const name = screen.getByRole("textbox", { name: "Board name" });
+  fireEvent.change(name, { target: { value: "   " } });
+  expect(screen.getByRole("button", { name: "Create Board" })).toBeDisabled();
+  expect(workApi.addBoard).not.toHaveBeenCalled();
+  fireEvent.change(name, { target: { value: "Property launch" } });
+  fireEvent.click(screen.getByRole("button", { name: "Create Board" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("A board with this name already exists.");
+  expect(name).toHaveValue("Property launch");
+  expect(screen.getByRole("heading", { name: "Property launch" })).toBeInTheDocument();
+});
 
 test("headers cycle through URL-backed sorting and Back restores the previous order", async () => {
   setup();

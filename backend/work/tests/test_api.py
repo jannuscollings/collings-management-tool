@@ -409,6 +409,9 @@ class WorkApiTests(TestCase):
         created = self.client.post(url, {"name": "New delivery"}, format="json")
         self.assertEqual(created.status_code, 201)
         board_id = created.data[-1]["id"]
+        workspace = self.client.get("/api/workspaces/creative-design/")
+        self.assertEqual([group["name"] for group in workspace.data["groups"]],
+                         ["Property launch", "Campaign content", "Ongoing requests", "New delivery"])
         duplicate = self.client.post(url, {"name": "new DELIVERY"}, format="json")
         self.assertEqual(duplicate.status_code, 400)
         renamed = self.client.patch(f"{url}{board_id}/", {"name": "Delivery"}, format="json")
