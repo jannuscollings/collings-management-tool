@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { WorkItemLink } from "./WorkItemDrawer";
 import { formatDay, itemPlacement, localToday, timelineStart } from "./workspaceTimelineDates";
 import Badge from "../ui/Badge";
@@ -29,7 +30,7 @@ function DateGrid({ start, today, item, placement }) {
   </div>;
 }
 
-export default function WorkspaceTimeline({ groups, hasActiveFilters, loading }) {
+export default function WorkspaceTimeline({ groups, hasActiveFilters, loading, collapsedBoards = [], onToggleBoard }) {
   const [windowOffset, setWindowOffset] = useState(0);
   const today = localToday();
   const start = timelineStart(today, windowOffset);
@@ -49,6 +50,8 @@ export default function WorkspaceTimeline({ groups, hasActiveFilters, loading })
       </div>
     </Panel>
     {groups.map((group) => {
+      const filterMatch = hasActiveFilters && group.work_items.length > 0;
+      const expanded = !collapsedBoards.includes(String(group.id)) || filterMatch;
       const rows = group.work_items.map((item) => ({ item, placement: itemPlacement(item, start, DAYS) }));
       const scheduled = rows.filter(({ placement }) => typeof placement === "object");
       const unscheduled = rows.filter(({ placement }) => placement === "unscheduled");
@@ -57,8 +60,15 @@ export default function WorkspaceTimeline({ groups, hasActiveFilters, loading })
         <Panel className="overflow-hidden">
           <div className="flex items-center justify-between gap-3 border-b border-line bg-canvas/55 px-4 py-3">
             <h3 className="text-[13px] font-extrabold tracking-[0.02em] text-ink">{group.name}</h3>
-            <Badge variant="neutral">{group.work_items.length} {group.work_items.length === 1 ? "item" : "items"}</Badge>
+            <div className="flex shrink-0 items-center gap-1">
+              <Badge variant="neutral">{group.work_items.length} {group.work_items.length === 1 ? "item" : "items"}</Badge>
+              <button type="button" aria-expanded={expanded} aria-controls={`timeline-board-content-${group.id}`} aria-label={filterMatch ? `${group.name} expanded to show matching work` : `${expanded ? "Collapse" : "Expand"} ${group.name}`} onClick={() => onToggleBoard?.(group.id)} disabled={filterMatch}
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-ds-xs text-muted hover:bg-surface/70 hover:text-copy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 disabled:cursor-default disabled:opacity-60 shell:h-8 shell:w-8">
+                <ChevronDown className={`h-4 w-4 transition-transform duration-150 motion-reduce:transition-none ${expanded ? "" : "-rotate-90"}`} aria-hidden="true" />
+              </button>
+            </div>
           </div>
+          {expanded ? <div id={`timeline-board-content-${group.id}`}>
           <div className="overflow-x-auto" aria-label={`${group.name} date grid`}>
             <div style={{ minWidth: 220 + DAYS * DAY_WIDTH }}>
               <div className="flex border-b border-line bg-canvas/35">
@@ -83,6 +93,7 @@ export default function WorkspaceTimeline({ groups, hasActiveFilters, loading })
             <h4 className="text-[10px] font-extrabold uppercase tracking-wide text-muted">Outside this window</h4>
             <div className="mt-2 flex flex-wrap gap-2">{outside.map(({ item }) => <WorkItemLink key={item.id} item={item} className={`rounded-ds-xs border border-line bg-canvas px-2.5 py-1.5 text-[11px] font-semibold text-copy hover:border-brand hover:text-brand-strong ${item.status === "done" ? "opacity-55" : ""}`}>{item.reference} · {item.title} · {item.due_date}</WorkItemLink>)}</div>
           </div>}
+          </div> : <div id={`timeline-board-content-${group.id}`} hidden />}
         </Panel>
       </section>;
     })}

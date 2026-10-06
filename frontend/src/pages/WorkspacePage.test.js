@@ -37,7 +37,113 @@ function setup(path = "/workspaces/creative-design/", workspaceData = { name: "C
   if (!workApi.listWorkItems.getMockImplementation()) workApi.listWorkItems.mockResolvedValue({ data: items });
   return render(<MemoryRouter initialEntries={[path]}><Routes><Route path="/workspaces/:workspaceSlug/" element={<><LocationTools /><WorkspacePage /></>} /></Routes></MemoryRouter>);
 }
-beforeEach(() => { jest.resetAllMocks(); mockUser = { is_staff: true }; });
+beforeEach(() => {
+  jest.resetAllMocks();
+  mockUser = { is_staff: true };
+  window.localStorage.removeItem("cmt-collapsed-boards:creative-design");
+  window.localStorage.removeItem("cmt-collapsed-boards:operations");
+});
+
+test("Boards start expanded and the chevron hides and restores desktop and mobile work", async () => {
+  setup();
+  await screen.findByRole("link", { name: "Zebra" });
+  const board = document.getElementById("board-1");
+  const collapse = within(board).getByRole("button", { name: "Collapse Property launch" });
+  expect(collapse).toHaveAttribute("aria-expanded", "true");
+  expect(within(board).getByRole("table")).toBeInTheDocument();
+  expect(within(board).getByRole("list", { name: "Property launch mobile work items" })).toBeInTheDocument();
+  fireEvent.click(collapse);
+  const expand = within(board).getByRole("button", { name: "Expand Property launch" });
+  expect(expand).toHaveAttribute("aria-expanded", "false");
+  expect(within(board).getByText("2 items")).toBeInTheDocument();
+  expect(within(board).queryByRole("table")).not.toBeInTheDocument();
+  expect(within(board).queryByRole("list")).not.toBeInTheDocument();
+  fireEvent.click(expand);
+  expect(within(board).getByRole("table")).toBeInTheDocument();
+  expect(within(board).getByRole("list")).toBeInTheDocument();
+  expect(workApi.listWorkItems).toHaveBeenCalledTimes(1);
+});
+
+test("Boards have independent states and preferences survive remount within their Workspace", async () => {
+  const groups = { name: "Creative & Design", groups: [{ id: 1, name: "Property launch" }, { id: 2, name: "Operations board" }] };
+  workApi.listWorkItems.mockResolvedValue({ data: [items[0], { ...items[1], group: 2 }] });
+  const view = setup("/workspaces/creative-design/", groups);
+  await screen.findByRole("link", { name: "Zebra" });
+  fireEvent.click(screen.getByRole("button", { name: "Collapse Property launch" }));
+  expect(within(document.getElementById("board-1")).queryByRole("table")).not.toBeInTheDocument();
+  expect(within(document.getElementById("board-2")).getByRole("link", { name: "Alpha" })).toBeInTheDocument();
+  expect(JSON.parse(window.localStorage.getItem("cmt-collapsed-boards:creative-design"))).toEqual(["1"]);
+  view.unmount();
+  setup("/workspaces/creative-design/", groups);
+  await screen.findByRole("heading", { name: "Property launch" });
+  expect(screen.getByRole("button", { name: "Expand Property launch" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Collapse Operations board" })).toBeInTheDocument();
+});
+
+test("invalid preferences default to expanded and another Workspace does not inherit collapse", async () => {
+  window.localStorage.setItem("cmt-collapsed-boards:creative-design", "{bad json");
+  const view = setup();
+  await screen.findByRole("link", { name: "Zebra" });
+  expect(screen.getByRole("button", { name: "Collapse Property launch" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Collapse Property launch" }));
+  view.unmount();
+  setup("/workspaces/operations/");
+  await screen.findByRole("link", { name: "Zebra" });
+  expect(screen.getByRole("button", { name: "Collapse Property launch" })).toBeInTheDocument();
+});
+
+test("Board collapse remains usable when local storage is unavailable", async () => {
+  const read = jest.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("storage unavailable"); });
+  const write = jest.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("storage unavailable"); });
+  try {
+    setup();
+    await screen.findByRole("link", { name: "Zebra" });
+    fireEvent.click(screen.getByRole("button", { name: "Collapse Property launch" }));
+    expect(screen.getByRole("button", { name: "Expand Property launch" })).toBeInTheDocument();
+  } finally {
+    read.mockRestore();
+    write.mockRestore();
+  }
+});
+
+test("a matching filter reveals collapsed work and clearing it restores the preference", async () => {
+  workApi.listWorkItems.mockImplementation(({ priority }) => Promise.resolve({ data: priority ? [{ ...items[0], priority: "high" }] : items }));
+  setup();
+  await screen.findByRole("link", { name: "Zebra" });
+  fireEvent.click(screen.getByRole("button", { name: "Collapse Property launch" }));
+  expect(screen.queryByRole("link", { name: "Zebra" })).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Priority"), { target: { value: "high" } });
+  expect(await screen.findByRole("link", { name: "Zebra" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Property launch expanded to show matching work" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Expand Property launch" })).toBeInTheDocument());
+  expect(screen.queryByRole("link", { name: "Zebra" })).not.toBeInTheDocument();
+});
+
+test("Table and Board-grouped Timeline share the collapse preference", async () => {
+  setup();
+  await screen.findByRole("link", { name: "Zebra" });
+  fireEvent.click(screen.getByRole("button", { name: "Collapse Property launch" }));
+  fireEvent.click(screen.getByRole("button", { name: "Timeline" }));
+  const timeline = screen.getByRole("region", { name: "Property launch Timeline" });
+  expect(within(timeline).getByRole("button", { name: "Expand Property launch" })).toHaveAttribute("aria-expanded", "false");
+  expect(within(timeline).queryByLabelText("Property launch date grid")).not.toBeInTheDocument();
+  fireEvent.click(within(timeline).getByRole("button", { name: "Expand Property launch" }));
+  expect(within(timeline).getByLabelText("Property launch date grid")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Table" }));
+  expect(within(document.getElementById("board-1")).getByRole("table")).toBeInTheDocument();
+});
+
+test("Staff can collapse a Board without gaining management controls", async () => {
+  mockUser = { is_staff: false };
+  setup();
+  await screen.findByRole("link", { name: "Zebra" });
+  fireEvent.click(screen.getByRole("button", { name: "Collapse Property launch" }));
+  expect(screen.getByRole("button", { name: "Expand Property launch" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "New Board" })).not.toBeInTheDocument();
+  fireEvent.doubleClick(screen.getByRole("heading", { name: "Property launch" }));
+  expect(screen.queryByRole("textbox", { name: /Rename Property launch/ })).not.toBeInTheDocument();
+});
 
 test("Admin creates a Board in this Workspace and sees it immediately across applicable views", async () => {
   workApi.addBoard.mockResolvedValue({ data: [
@@ -51,6 +157,7 @@ test("Admin creates a Board in this Workspace and sees it immediately across app
   fireEvent.click(screen.getByRole("button", { name: "Create Board" }));
   await waitFor(() => expect(workApi.addBoard).toHaveBeenCalledWith("creative-design", "New delivery"));
   await screen.findByRole("heading", { name: "New delivery" });
+  expect(screen.getByRole("button", { name: "Collapse New delivery" })).toHaveAttribute("aria-expanded", "true");
   expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["Property launch", "New delivery"]);
   fireEvent.click(screen.getByRole("button", { name: "Kanban" }));
   expect(screen.getByText("Kanban view")).toBeInTheDocument();
@@ -215,9 +322,56 @@ test("admin Table shows why Review is unavailable without a reviewer", async () 
   await screen.findByRole("link", { name: "Zebra" });
   fireEvent.click(within(screen.getByRole("table")).getByRole("button", { name: "Edit status for WI-000002" }));
   const status = within(screen.getByRole("table")).getByRole("combobox", { name: "Edit status for WI-000002" });
-  expect(within(status).getByRole("option", { name: "Review" })).toBeDisabled();
-  expect(within(screen.getByRole("table")).getByText("Assign an active reviewer to submit for review.")).toBeInTheDocument();
+  expect(within(status).getByRole("option", { name: /Review — assign an active reviewer/ })).toBeDisabled();
+  expect(status).toHaveAttribute("title", "Assign an active reviewer to submit for review.");
+  expect(within(screen.getByRole("table")).getByText("Assign an active reviewer to submit for review.")).toHaveClass("sr-only");
   expect(workApi.updateItem).not.toHaveBeenCalled();
+});
+
+test("desktop editors stay within the existing cells with compact field widths", async () => {
+  setup();
+  await screen.findByRole("link", { name: "Zebra" });
+  const table = screen.getByRole("table");
+  const widths = { status: "w-[132px]", priority: "w-[112px]", owner: "w-[168px]", reviewer: "w-[168px]" };
+  for (const [field, width] of Object.entries(widths)) {
+    fireEvent.click(within(table).getByRole("button", { name: `Edit ${field} for WI-000002` }));
+    const editor = within(table).getByRole("combobox", { name: `Edit ${field} for WI-000002` });
+    expect(editor).toHaveClass("absolute", "h-7", width, "focus:ring-2");
+    expect(editor.closest("td")).toHaveClass("relative");
+    expect(editor.closest("td").querySelector(".invisible")).toBeInTheDocument();
+    fireEvent.keyDown(editor, { key: "Escape" });
+  }
+  fireEvent.click(within(table).getByRole("button", { name: "Edit due_date for WI-000002" }));
+  const date = within(table).getByLabelText("Edit due date for WI-000002");
+  expect(date).toHaveClass("h-7", "w-[155px]", "focus:ring-2");
+  expect(date.closest("td").querySelector(".invisible")).toBeInTheDocument();
+});
+
+test("Admin owner, reviewer, and due date editors retain their one-field saves", async () => {
+  workApi.updateItem.mockImplementation((id, patch) => Promise.resolve({ data: { ...items[0], ...patch } }));
+  setup();
+  await screen.findByRole("link", { name: "Zebra" });
+  const table = screen.getByRole("table");
+  for (const field of ["owner", "reviewer"]) {
+    fireEvent.click(within(table).getByRole("button", { name: `Edit ${field} for WI-000002` }));
+    fireEvent.change(within(table).getByRole("combobox", { name: `Edit ${field} for WI-000002` }), { target: { value: "7" } });
+    await waitFor(() => expect(workApi.updateItem).toHaveBeenCalledWith(2, { [field]: 7 }));
+    await waitFor(() => expect(within(table).getByRole("button", { name: `Edit ${field} for WI-000002` })).toBeInTheDocument());
+  }
+  fireEvent.click(within(table).getByRole("button", { name: "Edit due_date for WI-000002" }));
+  fireEvent.change(within(table).getByLabelText("Edit due date for WI-000002"), { target: { value: "2026-10-15" } });
+  await waitFor(() => expect(workApi.updateItem).toHaveBeenCalledWith(2, { due_date: "2026-10-15" }));
+});
+
+test("desktop due date still clears through its compact control", async () => {
+  workApi.listWorkItems.mockResolvedValue({ data: [{ ...items[0], due_date: "2026-10-15" }] });
+  workApi.updateItem.mockResolvedValue({ data: { ...items[0], due_date: null } });
+  setup();
+  await screen.findByRole("link", { name: "Zebra" });
+  const table = screen.getByRole("table");
+  fireEvent.click(within(table).getByRole("button", { name: "Edit due_date for WI-000002" }));
+  fireEvent.click(within(table).getByRole("button", { name: "Clear due date for WI-000002" }));
+  await waitFor(() => expect(workApi.updateItem).toHaveBeenCalledWith(2, { due_date: null }));
 });
 
 test("admin Table shows the backend reviewer error if assignment changes before saving", async () => {

@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { DrawerLink, WorkItemLink, useWorkItemContext } from "../components/work/WorkItemDrawer";
 import toast from "react-hot-toast";
-import { CalendarDays, LayoutGrid, List, Plus, Search, SlidersHorizontal, X } from "lucide-react";
+import { CalendarDays, ChevronDown, LayoutGrid, List, Plus, Search, SlidersHorizontal, X } from "lucide-react";
 
 import { WORK_PRIORITY_OPTIONS, WORK_STATUS_OPTIONS, workApi } from "../api/work";
 import PageContainer from "../components/layout/PageContainer";
@@ -23,6 +23,16 @@ const STATUS_LABELS = {
   review: "Review",
   done: "Done",
 };
+
+const collapsedBoardsKey = (workspaceSlug) => `cmt-collapsed-boards:${workspaceSlug}`;
+function readCollapsedBoards(workspaceSlug) {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(collapsedBoardsKey(workspaceSlug)) || "[]");
+    return Array.isArray(saved) && saved.every((id) => typeof id === "string" && /^\d+$/.test(id)) ? saved : [];
+  } catch {
+    return [];
+  }
+}
 
 function GroupHeading({ group, canRename, onRename }) {
   const [editing, setEditing] = useState(false);
@@ -128,6 +138,17 @@ export default function WorkspacePage() {
   const sortDirection = ["asc", "desc"].includes(searchParams.get("direction")) ? searchParams.get("direction") : null;
   const [searchInput, setSearchInput] = useState(querySearch);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [collapsePreference, setCollapsePreference] = useState(() => ({ workspaceSlug, ids: readCollapsedBoards(workspaceSlug) }));
+  const collapsedBoards = collapsePreference.workspaceSlug === workspaceSlug
+    ? collapsePreference.ids : readCollapsedBoards(workspaceSlug);
+  const toggleBoard = (boardId) => {
+    const id = String(boardId);
+    const next = collapsedBoards.includes(id) ? collapsedBoards.filter((saved) => saved !== id) : [...collapsedBoards, id];
+    setCollapsePreference({ workspaceSlug, ids: next });
+    try { window.localStorage.setItem(collapsedBoardsKey(workspaceSlug), JSON.stringify(next)); } catch {
+      // Collapse still works for this session when local storage is unavailable.
+    }
+  };
   const currentQuery = useRef("");
   currentQuery.current = JSON.stringify([workspaceSlug, querySearch, statusFilter, priorityFilter, ownerFilter]);
   const hasActiveFilters = Boolean(querySearch || statusFilter || priorityFilter || ownerFilter);
@@ -460,13 +481,23 @@ export default function WorkspacePage() {
       </Panel>
 
       {viewMode === "table" && <div className={`space-y-5 transition-opacity ${itemsLoading ? "opacity-70" : "opacity-100"}`}>
-        {tableGroups.map((group) => (
+        {tableGroups.map((group) => {
+          const filterMatch = hasActiveFilters && group.work_items.length > 0;
+          const expanded = !collapsedBoards.includes(String(group.id)) || filterMatch;
+          return (
           <section key={group.id} id={`board-${group.id}`} tabIndex={-1} className="scroll-mt-20 focus:outline-none">
             <Panel className="overflow-hidden">
               <div className="flex items-center justify-between gap-3 border-b border-line bg-canvas/55 px-4 py-3">
                 <GroupHeading group={group} canRename={isAdmin} onRename={renameGroup} />
-                <Badge variant="neutral">{group.work_items.length} {group.work_items.length === 1 ? "item" : "items"}</Badge>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Badge variant="neutral">{group.work_items.length} {group.work_items.length === 1 ? "item" : "items"}</Badge>
+                  <button type="button" aria-expanded={expanded} aria-controls={`board-content-${group.id}`} aria-label={filterMatch ? `${group.name} expanded to show matching work` : `${expanded ? "Collapse" : "Expand"} ${group.name}`} onClick={() => toggleBoard(group.id)} disabled={filterMatch}
+                    className="grid h-11 w-11 shrink-0 place-items-center rounded-ds-xs text-muted hover:bg-surface/70 hover:text-copy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 disabled:cursor-default disabled:opacity-60 shell:h-8 shell:w-8">
+                    <ChevronDown className={`h-4 w-4 transition-transform duration-150 motion-reduce:transition-none ${expanded ? "" : "-rotate-90"}`} aria-hidden="true" />
+                  </button>
+                </div>
               </div>
+              {expanded ? <div id={`board-content-${group.id}`}>
               <div className="hidden overflow-x-auto shell:block">
                 <table className="w-full min-w-[980px] border-collapse text-left">
                   <thead className="bg-canvas/35">
@@ -493,7 +524,7 @@ export default function WorkspacePage() {
                         <td className="px-[13px] py-3">
                           <WorkItemLink item={item} className="font-bold text-ink hover:text-brand-strong">{item.title}</WorkItemLink>
                         </td>
-                        {["status", "priority", "owner", "reviewer", "due_date"].map((field) => <td key={field} className="px-[13px] py-3"><WorkspaceTableCell item={item} field={field} users={users} canEdit={isAdmin && item.permissions?.manage && !itemsLoading && !pendingMoves.current.has(item.id)} busy={savingCell === `${item.id}:${field}`} onSave={saveCell} /></td>)}
+                        {["status", "priority", "owner", "reviewer", "due_date"].map((field) => <td key={field} className="relative px-[13px] py-3"><WorkspaceTableCell item={item} field={field} users={users} canEdit={isAdmin && item.permissions?.manage && !itemsLoading && !pendingMoves.current.has(item.id)} busy={savingCell === `${item.id}:${field}`} onSave={saveCell} inTable /></td>)}
                       </tr>
                     ))}
                   </tbody>
@@ -523,9 +554,10 @@ export default function WorkspacePage() {
                   </article>;
                 })}
               </div>
+              </div> : <div id={`board-content-${group.id}`} hidden />}
             </Panel>
           </section>
-        ))}
+        ); })}
       </div>}
       {viewMode === "kanban" && (
         <WorkspaceKanban
@@ -537,7 +569,7 @@ export default function WorkspacePage() {
           workspaceSlug={workspaceSlug}
         />
       )}
-      {viewMode === "timeline" && <WorkspaceTimeline groups={filteredGroups} hasActiveFilters={hasActiveFilters} loading={itemsLoading} />}
+      {viewMode === "timeline" && <WorkspaceTimeline groups={filteredGroups} hasActiveFilters={hasActiveFilters} loading={itemsLoading} collapsedBoards={collapsedBoards} onToggleBoard={toggleBoard} />}
     </PageContainer>
   );
 }
