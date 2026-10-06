@@ -49,7 +49,7 @@ function ResultPreview({ kind, result, query }) {
   </span>;
 }
 
-export default function SearchDialog({ open, onOpenChange, triggerRef, returnFocusRef }) {
+export default function SearchDialog({ open, onOpenChange, triggerRef, returnFocusRef, initialQuery = "" }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [input, setInput] = useState("");
@@ -67,13 +67,13 @@ export default function SearchDialog({ open, onOpenChange, triggerRef, returnFoc
   const drawerContainer = open ? document.getElementById("cmt-drawer-content") : null;
 
   useEffect(() => {
-    if (open) navigated.current = false;
+    if (open) { navigated.current = false; setInput(initialQuery); }
     if (!open) {
       requestNumber.current += 1;
       setInput(""); setCategory("all"); setResults(EMPTY); setError(false); setLoading(false);
       navigatingFrom.current = null;
     }
-  }, [open]);
+  }, [open, initialQuery]);
 
   useEffect(() => {
     if (!open || !ready) {

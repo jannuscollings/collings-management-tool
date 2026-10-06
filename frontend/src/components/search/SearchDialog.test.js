@@ -1,8 +1,9 @@
 import "@testing-library/jest-dom";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createMemoryRouter, createRoutesFromElements, Route, RouterProvider, useLocation } from "react-router-dom";
+import { createMemoryRouter, createRoutesFromElements, MemoryRouter, Route, RouterProvider, useLocation } from "react-router-dom";
 
 import AppHeader from "../layout/AppHeader";
+import SearchDialog from "./SearchDialog";
 import NavigationGuard, { drawerIdentity, drawerSurvives, useDraftScope } from "../navigation/NavigationGuard";
 import { searchApi } from "../../api/search";
 
@@ -63,6 +64,13 @@ beforeEach(() => {
   jest.spyOn(window, "confirm").mockReturnValue(false);
 });
 afterEach(() => { window.confirm.mockRestore(); jest.clearAllMocks(); });
+
+test("an Ask DOMA query prefills the existing search and uses its API", async () => {
+  const ref = { current: null };
+  render(<MemoryRouter><SearchDialog open onOpenChange={() => {}} triggerRef={ref} returnFocusRef={ref} initialQuery="WI-000123" /></MemoryRouter>);
+  expect(screen.getByRole("searchbox", { name: "Search work, requests, and spaces" })).toHaveValue("WI-000123");
+  await waitFor(() => expect(searchApi.search).toHaveBeenCalledWith("WI-000123", expect.anything()));
+});
 
 test("click and shortcut open Search without removing a dirty editor; Escape returns focus", async () => {
   setup();
