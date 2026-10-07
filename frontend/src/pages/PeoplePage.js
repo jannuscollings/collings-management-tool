@@ -10,6 +10,7 @@ import Panel from "../components/ui/Panel";
 import Badge from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Field, Input, Select } from "../components/ui/Field";
+import ProfileAvatar from "../components/profile/ProfileAvatar";
 
 const blank = { first_name: "", last_name: "", email: "", job_title: "", role: "staff", password: "" };
 
@@ -89,11 +90,14 @@ export default function PeoplePage() {
     </Panel>}
     {loading ? <p role="status" className="text-sm text-muted">Loading people…</p> : error ? <Panel className="p-4"><p role="alert" className="text-sm text-critical">Couldn't load people.</p><Button variant="secondary" className="mt-3" onClick={load}>Retry</Button></Panel> :
       <div className="space-y-3">{people.map((person) => <Panel key={person.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
-        <div className="min-w-0">
+        <div className="flex min-w-0 items-start gap-3">
+          <ProfileAvatar user={person} otherUser className="h-8 w-8 text-[10px]" />
+          <div className="min-w-0">
           <p className="break-words text-sm font-bold text-ink">{person.display_name}</p>
           {person.job_title && <p className="break-words text-xs font-semibold text-copy">{person.job_title}</p>}
           <p className="break-all text-xs text-muted">{person.email}</p>
           <div className="mt-2 flex flex-wrap gap-2"><Badge variant={person.is_staff ? "brand" : "neutral"}>{person.is_staff ? "Admin" : "Staff"}</Badge><Badge variant={person.is_active ? "success" : "neutral"}>{person.is_active ? "Active" : "Inactive"}</Badge></div>
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" disabled={busy} onClick={() => edit(person)}>Edit</Button>

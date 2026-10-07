@@ -3,6 +3,7 @@ import { workApi } from '../../api/work';
 import { Button } from '../ui/Button';
 import { Field, Textarea } from '../ui/Field';
 import Panel from '../ui/Panel';
+import ProfileAvatar from '../profile/ProfileAvatar';
 import * as Dialog from '@radix-ui/react-dialog';
 
 // Email is unique and gives plain-text mentions an unambiguous, readable token.
@@ -163,7 +164,7 @@ function Comment({ itemId, comment, users, busy, onEdit, onDelete, onDraftDirty 
   const [editing, setEditing] = useState(false);
   return <div className="space-y-2">
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <span className="text-xs font-bold text-copy">{comment.author_detail.display_name}</span>
+      <span className="inline-flex min-w-0 items-center gap-2 text-xs font-bold text-copy"><ProfileAvatar user={comment.author_detail} otherUser className="h-6 w-6 text-[9px]" /><span className="truncate">{comment.author_detail.display_name}</span></span>
       <span className="text-[10px] text-muted"><time dateTime={comment.created_at}>{stamp(comment.created_at)}</time>{comment.edited_at && ' · edited'}</span>
     </div>
     {editing ? <Composer users={users} initial={comment} busy={busy} label="Save comment" source={`comment:${comment.id}`} onDraftDirty={onDraftDirty} onCancel={() => setEditing(false)} onSave={async (payload) => {

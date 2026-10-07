@@ -10,6 +10,7 @@ import { Button } from "../ui/Button";
 import { Field, Input, Select, Textarea } from "../ui/Field";
 import Panel from "../ui/Panel";
 import DueDate from "./DueDate";
+import ProfileAvatar from "../profile/ProfileAvatar";
 
 const statusVariants = { new: "neutral", in_progress: "info", review: "review", done: "success" };
 const statusLabel = (value) => WORK_STATUS_OPTIONS.find(([key]) => key === value)?.[1] || value;
@@ -33,7 +34,7 @@ const activityLabels = {
 };
 function Identity({ person }) {
   const name = person?.display_name || "Unassigned";
-  return <span className="inline-flex min-w-0 items-center gap-2"><span aria-hidden="true" className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-soft text-[10px] font-extrabold text-brand-strong">{person ? name.slice(0, 2).toUpperCase() : '—'}</span><span className="truncate">{name}</span></span>;
+  return <span className="inline-flex min-w-0 items-center gap-2">{person && <ProfileAvatar user={person} otherUser className="h-7 w-7 text-[10px]" />}<span className="truncate">{name}</span></span>;
 }
 function Section({ title, description, children, action }) {
   return <Panel className="min-w-0 p-4 shell:p-5"><div className="mb-4 flex flex-wrap items-start justify-between gap-3 shell:flex-nowrap"><div className="min-w-0"><h2 className="break-words text-sm font-extrabold text-ink">{title}</h2>{description && <p className="mt-1 break-words text-xs text-muted">{description}</p>}</div>{action}</div>{children}</Panel>;

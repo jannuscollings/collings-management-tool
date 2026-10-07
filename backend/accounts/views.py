@@ -1,5 +1,5 @@
 from django.middleware.csrf import get_token
-from django.http import HttpResponse
+from django.http import HttpResponse, Http404
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
@@ -70,12 +70,7 @@ class MyPhotoView(APIView):
     parser_classes = (MultiPartParser, FormParser)
 
     def get(self, request):
-        if not request.user.avatar_data:
-            return Response({"detail": "No profile photo."}, status=404)
-        response = HttpResponse(bytes(request.user.avatar_data), content_type="image/jpeg")
-        response["Cache-Control"] = "private, no-store"
-        response["X-Content-Type-Options"] = "nosniff"
-        return response
+        return photo_response(request.user)
 
     def post(self, request):
         invalid = set(request.data) - {"photo"}
@@ -94,6 +89,24 @@ class MyPhotoView(APIView):
         request.user.avatar_updated_at = timezone.now()
         request.user.save(update_fields=["avatar_data", "avatar_updated_at"])
         return Response(UserSerializer(request.user).data)
+
+
+def photo_response(user):
+    if not user.avatar_data:
+        raise Http404
+    response = HttpResponse(bytes(user.avatar_data), content_type="image/jpeg")
+    response["Cache-Control"] = "private, no-store"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+class UserPhotoView(APIView):
+    def get(self, request, user_id):
+        try:
+            user = User.objects.only("avatar_data").get(pk=user_id)
+        except User.DoesNotExist:
+            raise Http404
+        return photo_response(user)
 
 
 @api_view(["GET"])

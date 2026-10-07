@@ -14,13 +14,17 @@ User = get_user_model()
 
 class WorkUserSerializer(serializers.ModelSerializer):
     display_name = serializers.SerializerMethodField()
+    has_photo = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ("id", "email", "first_name", "last_name", "display_name")
+        fields = ("id", "email", "first_name", "last_name", "display_name", "has_photo", "avatar_updated_at")
 
     def get_display_name(self, user):
         return user.get_full_name() or user.email
+
+    def get_has_photo(self, user):
+        return bool(user.avatar_data)
 
 
 class WorkItemSerializer(serializers.ModelSerializer):

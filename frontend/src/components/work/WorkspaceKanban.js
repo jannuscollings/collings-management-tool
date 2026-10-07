@@ -6,6 +6,7 @@ import { WORK_STATUS_OPTIONS } from "../../api/work";
 import Badge from "../ui/Badge";
 import { Select } from "../ui/Field";
 import DueDate from "./DueDate";
+import ProfileAvatar from "../profile/ProfileAvatar";
 
 const PRIORITY_VARIANTS = {
   low: "neutral",
@@ -149,8 +150,9 @@ export default function WorkspaceKanban({
                           {item.title}
                         </h3>
                         <div className="mt-4 flex items-center justify-between gap-3 border-t border-line/70 pt-3">
-                          <span className="min-w-0 truncate text-[10.5px] font-semibold text-copy">
-                            {item.owner_detail?.display_name || "Unassigned"}
+                          <span className="inline-flex min-w-0 items-center gap-2 text-[10.5px] font-semibold text-copy">
+                            {item.owner_detail && <ProfileAvatar user={item.owner_detail} otherUser className="h-6 w-6 text-[9px]" />}
+                            <span className="truncate">{item.owner_detail?.display_name || "Unassigned"}</span>
                           </span>
                           <Badge variant={PRIORITY_VARIANTS[item.priority]} className="shrink-0 capitalize">{item.priority}</Badge>
                         </div>

@@ -30,6 +30,7 @@ afterEach(() => jest.clearAllMocks());
 test("job title can be created, edited, and cleared independently of access", async () => {
   render(<MemoryRouter><PeoplePage /></MemoryRouter>);
   await screen.findByText("Demo Admin");
+  expect(screen.getByLabelText("Initials for Demo Admin")).toHaveTextContent("DA");
   fireEvent.click(screen.getByRole("button", { name: "New person" }));
   fireEvent.change(screen.getByLabelText("First name"), { target: { value: "Jane" } });
   fireEvent.change(screen.getByLabelText("Last name"), { target: { value: "Designer" } });

@@ -23,3 +23,9 @@ test('a newly added active user beyond the first six can be selected and posted 
   expect(createComment).toHaveBeenCalledWith(1, { body: '@new@example.com', mentions: [7] });
   createComment.mockRestore();
 });
+
+test('discussion author keeps their name beside the avatar fallback', () => {
+  render(<WorkDiscussion itemId={1} comments={[{ id: 1, parent: null, author_detail: { id: 4, display_name: 'Sam Lee' }, body: 'Update', created_at: '2026-10-07T00:00:00Z', mention_details: [], can_manage: false, attachments: [] }]} users={[]} busy={false} run={jest.fn()} onDraftDirty={() => {}} hasDirty={() => false} />);
+  expect(screen.getByText('Sam Lee')).toBeInTheDocument();
+  expect(screen.getByLabelText('Initials for Sam Lee')).toHaveTextContent('SL');
+});

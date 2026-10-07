@@ -13,6 +13,7 @@ import { Field, Input, Select } from "../components/ui/Field";
 import PageHeader from "../components/ui/PageHeader";
 import Panel from "../components/ui/Panel";
 import DueDate from "../components/work/DueDate";
+import ProfileAvatar from "../components/profile/ProfileAvatar";
 
 const PRIORITY_VARIANTS = {
   low: "neutral",
@@ -123,6 +124,7 @@ export default function MyWorkPage() {
         eyebrow="Work"
         title="My Work"
         description="Work items you own, review or have assigned sub-work on across workspaces."
+        actions={user && <div className="inline-flex min-w-0 items-center gap-2 text-xs font-semibold text-copy"><ProfileAvatar user={user} className="h-7 w-7 text-[10px]" /><span className="max-w-40 truncate">{user.display_name || [user.first_name, user.last_name].filter(Boolean).join(" ") || user.email}</span></div>}
       />
 
       <Panel className="mb-5 p-4">

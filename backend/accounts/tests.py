@@ -6,7 +6,8 @@ from PIL import Image
 from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 from rest_framework.request import Request
 from work.models import Workspace, WorkGroup, WorkItem, SubWork
-from work.serializers import WorkItemSerializer, SubWorkSerializer
+from work.serializers import WorkItemSerializer, SubWorkSerializer, WorkUserSerializer
+from accounts.serializers import PeopleSerializer
 
 
 User = get_user_model()
@@ -82,6 +83,26 @@ class SelfProfileApiTests(TestCase):
         self.staff.refresh_from_db()
         self.assertIsNone(self.staff.avatar_data)
         self.assertEqual(self.client.get("/api/auth/me/photo/").status_code, 404)
+
+    def test_authenticated_user_photo_and_identity_metadata_preserve_people_permissions(self):
+        self.client.force_authenticate(user=self.admin)
+        self.assertEqual(self.client.post("/api/auth/me/photo/", {"photo": photo_file()}, format="multipart").status_code, 200)
+        self.admin.refresh_from_db()
+        self.assertTrue(WorkUserSerializer(self.admin).data["has_photo"])
+        self.assertTrue(PeopleSerializer(self.admin).data["avatar_updated_at"])
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get(f"/api/auth/users/{self.admin.pk}/photo/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "image/jpeg")
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+        self.assertEqual(self.client.get(f"/api/auth/users/{self.other.pk}/photo/").status_code, 404)
+        self.assertEqual(self.client.get("/api/auth/users/999999/photo/").status_code, 404)
+        self.assertEqual(self.client.post(f"/api/auth/users/{self.admin.pk}/photo/", {}).status_code, 405)
+        self.assertEqual(self.client.patch(f"/api/auth/users/{self.admin.pk}/photo/", {}).status_code, 405)
+        self.assertEqual(self.client.delete(f"/api/auth/users/{self.admin.pk}/photo/").status_code, 405)
+        self.assertEqual(self.client.get("/api/auth/people/").status_code, 403)
+        self.client.force_authenticate(user=None)
+        self.assertEqual(self.client.get(f"/api/auth/users/{self.admin.pk}/photo/").status_code, 401)
 
     def test_invalid_and_oversized_photos_are_rejected_without_replacing_previous_photo(self):
         self.client.force_authenticate(user=self.staff)

@@ -9,6 +9,7 @@ export const authApi = {
   me: () => api.get("/api/auth/me/"),
   updateProfile: (payload) => api.patch("/api/auth/me/", payload),
   photo: () => api.get("/api/auth/me/photo/", { responseType: "blob" }),
+  userPhoto: (id) => api.get(`/api/auth/users/${id}/photo/`, { responseType: "blob" }),
   uploadPhoto: (file) => {
     const body = new FormData();
     body.append("photo", file);

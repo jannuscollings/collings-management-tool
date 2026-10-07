@@ -24,6 +24,7 @@ test("mobile Kanban keeps four scrolling columns, item opening, and permitted mo
   expect(scroller.firstChild.className).toContain("auto-cols-[minmax(280px,calc(100vw_-_5.5rem))]");
   expect(screen.getAllByRole("region")).toHaveLength(4);
   const newColumn = screen.getByRole("region", { name: "New work items" });
+  expect(within(newColumn).getByLabelText("Initials for Amy")).toHaveTextContent("A");
   expect(newColumn).toHaveClass("snap-start");
   expect(within(newColumn).getByRole("link", { name: /Launch page/ })).toHaveAttribute("href", "/?item=4");
   fireEvent.change(within(newColumn).getByRole("combobox", { name: "Move WI-000004" }), { target: { value: "in_progress" } });

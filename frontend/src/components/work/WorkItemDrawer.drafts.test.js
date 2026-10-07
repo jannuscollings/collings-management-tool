@@ -113,6 +113,15 @@ test("router guard gives one confirmation for X, overlay and Escape while keepin
   expect(screen.getByTestId("location")).toHaveTextContent("item=1");
 });
 
+test("work item keeps owner and reviewer identities beside avatar fallbacks", async () => {
+  setup();
+  await screen.findByText("Saved brief");
+  expect(screen.getByLabelText("Initials for Owner")).toHaveTextContent("O");
+  expect(screen.getByLabelText("Initials for Reviewer")).toHaveTextContent("R");
+  expect(screen.getAllByText("Owner").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("Reviewer").length).toBeGreaterThan(0);
+});
+
 test("core edits survive tab switches and reverting to saved values clears the close guard", async () => {
   setup();
   await screen.findByText("Saved brief");

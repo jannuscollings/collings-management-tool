@@ -48,15 +48,19 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 class PeopleSerializer(serializers.ModelSerializer):
     display_name = serializers.SerializerMethodField()
+    has_photo = serializers.SerializerMethodField()
     password = serializers.CharField(write_only=True, min_length=8, required=False, style={"input_type": "password"})
 
     class Meta:
         model = User
-        fields = ("id", "first_name", "last_name", "display_name", "email", "job_title", "is_staff", "is_active", "is_superuser", "password")
-        read_only_fields = ("id", "is_superuser", "display_name")
+        fields = ("id", "first_name", "last_name", "display_name", "email", "job_title", "is_staff", "is_active", "is_superuser", "has_photo", "avatar_updated_at", "password")
+        read_only_fields = ("id", "is_superuser", "display_name", "has_photo", "avatar_updated_at")
 
     def get_display_name(self, user):
         return user.get_full_name() or user.email
+
+    def get_has_photo(self, user):
+        return bool(user.avatar_data)
 
     def validate_email(self, value):
         value = value.strip().lower()
