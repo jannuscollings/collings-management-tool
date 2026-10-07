@@ -1,13 +1,17 @@
 from django.middleware.csrf import get_token
+from django.http import HttpResponse
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import generics, permissions, mixins, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.parsers import MultiPartParser, FormParser
 
-from .serializers import RegisterSerializer, UserSerializer, PeopleSerializer
+from .avatar import normalized_photo
+from .serializers import RegisterSerializer, UserSerializer, PeopleSerializer, SelfProfileSerializer
 
 User = get_user_model()
 
@@ -50,6 +54,45 @@ class MeView(APIView):
     """The current user — the frontend calls this to hydrate auth state."""
 
     def get(self, request):
+        return Response(UserSerializer(request.user).data)
+
+    def patch(self, request):
+        invalid = set(request.data) - {"first_name", "last_name", "bio"}
+        if invalid:
+            raise ValidationError({field: "This profile field cannot be edited." for field in invalid})
+        serializer = SelfProfileSerializer(request.user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(UserSerializer(request.user).data)
+
+
+class MyPhotoView(APIView):
+    parser_classes = (MultiPartParser, FormParser)
+
+    def get(self, request):
+        if not request.user.avatar_data:
+            return Response({"detail": "No profile photo."}, status=404)
+        response = HttpResponse(bytes(request.user.avatar_data), content_type="image/jpeg")
+        response["Cache-Control"] = "private, no-store"
+        response["X-Content-Type-Options"] = "nosniff"
+        return response
+
+    def post(self, request):
+        invalid = set(request.data) - {"photo"}
+        if invalid:
+            raise ValidationError({field: "Only a profile photo can be uploaded here." for field in invalid})
+        photo = request.FILES.get("photo")
+        if photo is None:
+            raise ValidationError({"photo": "Choose an image."})
+        request.user.avatar_data = normalized_photo(photo)
+        request.user.avatar_updated_at = timezone.now()
+        request.user.save(update_fields=["avatar_data", "avatar_updated_at"])
+        return Response(UserSerializer(request.user).data)
+
+    def delete(self, request):
+        request.user.avatar_data = None
+        request.user.avatar_updated_at = timezone.now()
+        request.user.save(update_fields=["avatar_data", "avatar_updated_at"])
         return Response(UserSerializer(request.user).data)
 
 

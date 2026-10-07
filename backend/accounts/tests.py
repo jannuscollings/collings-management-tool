@@ -1,5 +1,8 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
+from django.core.files.uploadedfile import SimpleUploadedFile
+from io import BytesIO
+from PIL import Image
 from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 from rest_framework.request import Request
 from work.models import Workspace, WorkGroup, WorkItem, SubWork
@@ -7,6 +10,94 @@ from work.serializers import WorkItemSerializer, SubWorkSerializer
 
 
 User = get_user_model()
+
+
+def photo_file(format="JPEG", name="photo.jpg"):
+    stream = BytesIO()
+    Image.new("RGB", (640, 480), "#297b88").save(stream, format=format)
+    return SimpleUploadedFile(name, stream.getvalue(), content_type={"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}[format])
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class SelfProfileApiTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(email="admin@example.com", password="password123", is_staff=True, job_title="Director")
+        self.staff = User.objects.create_user(email="staff@example.com", password="password123", first_name="Sam", last_name="Staff")
+        self.other = User.objects.create_user(email="other@example.com", password="password123")
+        self.client = APIClient()
+
+    def test_profile_requires_auth_and_persists_only_allowed_fields(self):
+        self.assertEqual(self.client.get("/api/auth/me/").status_code, 401)
+        self.assertEqual(self.client.get("/api/auth/me/photo/").status_code, 401)
+        self.assertEqual(self.client.post("/api/auth/me/photo/", {"photo": photo_file()}, format="multipart").status_code, 401)
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get("/api/auth/me/")
+        self.assertEqual(response.data["display_name"], "Sam Staff")
+        self.assertFalse(response.data["has_photo"])
+        response = self.client.patch("/api/auth/me/", {"first_name": "Alex", "last_name": "Designer", "bio": "Designs accessible campaigns."})
+        self.assertEqual(response.status_code, 200, response.data)
+        self.staff.refresh_from_db()
+        self.assertEqual((self.staff.first_name, self.staff.last_name, self.staff.bio), ("Alex", "Designer", "Designs accessible campaigns."))
+        self.assertEqual(self.client.get("/api/auth/me/").data["display_name"], "Alex Designer")
+
+    def test_profile_rejects_email_role_job_title_and_other_account_changes(self):
+        self.client.force_authenticate(user=self.staff)
+        for field, value in (("email", "new@example.com"), ("is_staff", True), ("is_active", False), ("job_title", "Director"), ("id", self.other.pk), ("avatar_data", "fake")):
+            response = self.client.patch("/api/auth/me/", {field: value})
+            self.assertEqual(response.status_code, 400, (field, response.data))
+        self.staff.refresh_from_db()
+        self.assertEqual(self.staff.email, "staff@example.com")
+        self.assertFalse(self.staff.is_staff)
+        self.assertTrue(self.staff.is_active)
+        self.assertEqual(self.staff.job_title, "")
+        self.assertEqual(self.client.patch(f"/api/auth/people/{self.other.pk}/", {"bio": "Changed"}).status_code, 403)
+        self.client.force_authenticate(user=self.admin)
+        self.assertEqual(self.client.patch("/api/auth/me/", {"is_staff": False}).status_code, 400)
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.is_staff)
+
+    def test_photo_upload_replace_and_remove_are_private_and_persisted(self):
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.post("/api/auth/me/photo/", {"photo": photo_file()}, format="multipart")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data["has_photo"])
+        self.staff.refresh_from_db()
+        self.assertTrue(self.staff.avatar_data)
+        saved = self.client.get("/api/auth/me/photo/")
+        self.assertEqual(saved.status_code, 200)
+        self.assertEqual(saved["Content-Type"], "image/jpeg")
+        self.assertEqual(saved["Cache-Control"], "private, no-store")
+        self.assertTrue(saved.content.startswith(b"\xff\xd8"))
+        replacement = self.client.post("/api/auth/me/photo/", {"photo": photo_file("PNG", "replacement.png")}, format="multipart")
+        self.assertEqual(replacement.status_code, 200, replacement.data)
+        webp = self.client.post("/api/auth/me/photo/", {"photo": photo_file("WEBP", "replacement.webp")}, format="multipart")
+        self.assertEqual(webp.status_code, 200, webp.data)
+        self.assertEqual(self.client.get("/api/auth/me/photo/").status_code, 200)
+        self.client.force_authenticate(user=self.other)
+        self.assertEqual(self.client.get("/api/auth/me/photo/").status_code, 404)
+        self.client.force_authenticate(user=self.staff)
+        removed = self.client.delete("/api/auth/me/photo/")
+        self.assertEqual(removed.status_code, 200)
+        self.assertFalse(removed.data["has_photo"])
+        self.staff.refresh_from_db()
+        self.assertIsNone(self.staff.avatar_data)
+        self.assertEqual(self.client.get("/api/auth/me/photo/").status_code, 404)
+
+    def test_invalid_and_oversized_photos_are_rejected_without_replacing_previous_photo(self):
+        self.client.force_authenticate(user=self.staff)
+        self.assertEqual(self.client.post("/api/auth/me/photo/", {"photo": photo_file()}, format="multipart").status_code, 200)
+        self.staff.refresh_from_db()
+        original = bytes(self.staff.avatar_data)
+        uploads = [
+            SimpleUploadedFile("vector.svg", b"<svg xmlns='http://www.w3.org/2000/svg'/>", content_type="image/svg+xml"),
+            SimpleUploadedFile("fake.jpg", b"not a jpeg", content_type="image/jpeg"),
+            SimpleUploadedFile("huge.png", b"x" * (5 * 1024 * 1024 + 1), content_type="image/png"),
+        ]
+        for upload in uploads:
+            response = self.client.post("/api/auth/me/photo/", {"photo": upload}, format="multipart")
+            self.assertEqual(response.status_code, 400, response.data)
+        self.staff.refresh_from_db()
+        self.assertEqual(bytes(self.staff.avatar_data), original)
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)

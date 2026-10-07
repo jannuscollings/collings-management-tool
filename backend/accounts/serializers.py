@@ -5,10 +5,33 @@ User = get_user_model()
 
 
 class UserSerializer(serializers.ModelSerializer):
+    display_name = serializers.SerializerMethodField()
+    has_photo = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ("id", "email", "first_name", "last_name", "is_staff")
-        read_only_fields = ("id", "is_staff")
+        fields = ("id", "email", "first_name", "last_name", "display_name", "job_title", "bio", "has_photo", "avatar_updated_at", "is_staff")
+        read_only_fields = fields
+
+    def get_display_name(self, user):
+        return user.get_full_name() or user.email
+
+    def get_has_photo(self, user):
+        return bool(user.avatar_data)
+
+
+class SelfProfileSerializer(serializers.ModelSerializer):
+    bio = serializers.CharField(max_length=500, allow_blank=True, required=False, trim_whitespace=True)
+
+    class Meta:
+        model = User
+        fields = ("first_name", "last_name", "bio")
+
+    def validate_first_name(self, value):
+        return value.strip()
+
+    def validate_last_name(self, value):
+        return value.strip()
 
 
 class RegisterSerializer(serializers.ModelSerializer):

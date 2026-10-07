@@ -25,6 +25,7 @@ beforeEach(() => { mockDispatch.mockReset(); mockConfirmSignOut.mockReset(); });
 test("Cancel sign-out retains the session; Continue dispatches once", async () => {
   mockConfirmSignOut.mockReturnValueOnce(false).mockReturnValueOnce(true);
   render(<MemoryRouter><AccountMenu /></MemoryRouter>);
+  expect(screen.getByRole("link", { name: /My Profile/ })).toHaveAttribute("href", "/profile");
   fireEvent.click(await screen.findByText("Sign out"));
   expect(mockConfirmSignOut).toHaveBeenCalledTimes(1);
   expect(mockDispatch).not.toHaveBeenCalled();

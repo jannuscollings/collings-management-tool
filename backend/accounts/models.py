@@ -37,6 +37,9 @@ class User(AbstractUser):
     username = None
     email = models.EmailField("email address", unique=True)
     job_title = models.CharField(max_length=150, blank=True, default="")
+    bio = models.TextField(blank=True, default="")
+    avatar_data = models.BinaryField(blank=True, null=True, editable=False)
+    avatar_updated_at = models.DateTimeField(blank=True, null=True, editable=False)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []

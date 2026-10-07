@@ -18,5 +18,6 @@ urlpatterns = [
     path("refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("verify/", TokenVerifyView.as_view(), name="token_verify"),
     path("me/", views.MeView.as_view(), name="me"),
+    path("me/photo/", views.MyPhotoView.as_view(), name="my-photo"),
     *router.urls,
 ]
