@@ -371,7 +371,7 @@ export default function WorkspacePage() {
   if (!workspace) return <PageContainer className="text-sm text-copy">Workspace unavailable.</PageContainer>;
 
   return (
-    <PageContainer className="pb-16 shell:pb-[34px]">
+    <PageContainer className="max-w-none min-w-0 pb-16 shell:pb-[34px]">
       <PageHeader
         eyebrow="Workspace"
         title={workspace.name}
@@ -435,8 +435,8 @@ export default function WorkspacePage() {
         {boardError && <p role="alert" className="mt-2 text-xs text-critical">{boardError}</p>}
       </Panel>}
 
-      <Panel className="mb-5 p-3 shell:p-4">
-        <div className="grid gap-2 shell:grid-cols-[minmax(230px,2fr)_repeat(3,minmax(140px,1fr))_auto] shell:items-end shell:gap-3">
+      <Panel className="mb-5 min-w-0 p-3 shell:p-4">
+        <div className="grid min-w-0 gap-2 shell:grid-cols-2 shell:items-end shell:gap-3 xl:grid-cols-[minmax(230px,2fr)_repeat(3,minmax(140px,1fr))_auto]">
           <Field label="Search">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
@@ -480,14 +480,14 @@ export default function WorkspacePage() {
         {itemsLoading && <p className="mt-2 text-[10.5px] text-muted">Updating work items…</p>}
       </Panel>
 
-      {viewMode === "table" && <div className={`space-y-5 transition-opacity ${itemsLoading ? "opacity-70" : "opacity-100"}`}>
+      {viewMode === "table" && <div className={`min-w-0 space-y-5 transition-opacity ${itemsLoading ? "opacity-70" : "opacity-100"}`}>
         {tableGroups.map((group) => {
           const filterMatch = hasActiveFilters && group.work_items.length > 0;
           const expanded = !collapsedBoards.includes(String(group.id)) || filterMatch;
           return (
           <section key={group.id} id={`board-${group.id}`} tabIndex={-1} className="scroll-mt-20 focus:outline-none">
-            <Panel className="overflow-hidden">
-              <div className="flex items-center justify-between gap-3 border-b border-line bg-canvas/55 px-4 py-3">
+            <Panel className="min-w-0 overflow-hidden">
+              <div className="flex min-w-0 items-center justify-between gap-3 border-b border-line bg-canvas/55 px-4 py-3">
                 <GroupHeading group={group} canRename={isAdmin} onRename={renameGroup} />
                 <div className="flex shrink-0 items-center gap-1">
                   <Badge variant="neutral">{group.work_items.length} {group.work_items.length === 1 ? "item" : "items"}</Badge>
@@ -498,7 +498,7 @@ export default function WorkspacePage() {
                 </div>
               </div>
               {expanded ? <div id={`board-content-${group.id}`}>
-              <div className="hidden overflow-x-auto shell:block">
+              <div className="hidden max-w-full overflow-x-auto shell:block">
                 <table className="w-full min-w-[980px] border-collapse text-left">
                   <thead className="bg-canvas/35">
                     <tr className="border-b border-line">
